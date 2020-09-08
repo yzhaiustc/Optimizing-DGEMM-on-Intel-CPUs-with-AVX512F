@@ -4,8 +4,8 @@
 #include "utils.h"
 #include "mkl.h"
 #include "kernels.h"
-//#define verbose 1
-#define MYDGEMM dgemm_reg_blocking_2x2
+#define verbose 1
+#define MYDGEMM dgemm_cache_blocking_reg_blocking_8x4_avx2_template_unrollx4
 
 int main(int argc, char *argv[]){
     if (argc != 4) {
@@ -34,10 +34,12 @@ int main(int argc, char *argv[]){
     randomize_matrix(A,m,k);randomize_matrix(B,k,n);randomize_matrix(C,m,n);
     copy_matrix(C,C_ref,m*n);
 #ifdef verbose
-    printf("Initialization completed. Start verifying correctness against Intel MKL.\n");
+    printf("Initialization completed.\n Start verifying correctness against Intel MKL...\n");
 #endif
     MYDGEMM(m,n,k,alpha,A,m,B,k,beta,C,m);
     cblas_dgemm(CblasColMajor, CblasNoTrans,CblasNoTrans,m,n,k,alpha,A,m,B,k,beta,C_ref,m);
+    // print_matrix(C,m,n);
+    // print_matrix(C_ref,m,n);
     if (!verify_matrix(C_ref,C,m*n)) {
         printf("Incorrect. Exited.\n");
         exit(-4);
@@ -50,7 +52,7 @@ int main(int argc, char *argv[]){
     int n_count,N=10;
     double t0,t1;
 #ifdef verbose
-    printf("Start benchmarking MYDGEMM.\n");
+    printf("Start benchmarking MYDGEMM...\n");
 #endif
     t0=get_sec();
     for (n_count=0;n_count<N;n_count++){
@@ -59,7 +61,7 @@ int main(int argc, char *argv[]){
     t1=get_sec();
     printf("Average elasped time: %f second, performance: %f GFLOPS.\n", (t1-t0)/N,2.*1e-9*N*m*n*k/(t1-t0));
 #ifdef verbose
-    printf("Start benchmarking MKL DGEMM.\n");
+    printf("Start benchmarking MKL DGEMM...\n");
 #endif
     t0=get_sec();
     for (n_count=0;n_count<N;n_count++){

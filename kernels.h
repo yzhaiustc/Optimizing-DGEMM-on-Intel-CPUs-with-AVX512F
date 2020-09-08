@@ -1,3 +1,4 @@
+#include "immintrin.h"
 #define A(i,j) A[(i)+(j)*LDA]
 #define B(i,j) B[(i)+(j)*LDB]
 #define C(i,j) C[(i)+(j)*LDC]
@@ -67,4 +68,396 @@ void dgemm_reg_blocking_2x2(int M, int N, int K, double alpha, double *A, int LD
     // boundary conditions
     if (M2!=M) dgemm_ijk_opt(M-M2,N,K,alpha,A+M2,LDA,B,LDB,1.0,&C(M2,0),LDC);
     if (N2!=N) dgemm_ijk_opt(M2,N-N2,K,alpha,A,LDA,&B(0,N2),LDB,1.0,&C(0,N2),LDC);
+}
+
+void dgemm_reg_blocking_4x4(int M, int N, int K, double alpha, double *A, int LDA, double *B, int LDB, double beta, double *C, int LDC){
+    int i,j,k;
+    if (beta != 1.0) scale_c(C,M,N,LDC,beta);
+    int M4=M&-4,N4=N&-4;
+    for (i=0;i<M4;i+=4){
+        for (j=0;j<N4;j+=4){
+            double c00=C(i,j);
+            double c01=C(i,j+1);
+            double c02=C(i,j+2);
+            double c03=C(i,j+3);
+            double c10=C(i+1,j);
+            double c11=C(i+1,j+1);
+            double c12=C(i+1,j+2);
+            double c13=C(i+1,j+3);
+            double c20=C(i+2,j);
+            double c21=C(i+2,j+1);
+            double c22=C(i+2,j+2);
+            double c23=C(i+2,j+3);
+            double c30=C(i+3,j);
+            double c31=C(i+3,j+1);
+            double c32=C(i+3,j+2);
+            double c33=C(i+3,j+3);
+            for (k=0;k<K;k++){
+                double a0 = alpha*A(i,k);
+                double a1 = alpha*A(i+1,k);
+                double a2 = alpha*A(i+2,k);
+                double a3 = alpha*A(i+3,k);
+                double b0 = B(k,j);
+                double b1 = B(k,j+1);
+                double b2 = B(k,j+2);
+                double b3 = B(k,j+3);
+                c00 += a0*b0;
+                c01 += a0*b1;
+                c02 += a0*b2;
+                c03 += a0*b3;
+                c10 += a1*b0;
+                c11 += a1*b1;
+                c12 += a1*b2;
+                c13 += a1*b3;
+                c20 += a2*b0;
+                c21 += a2*b1;
+                c22 += a2*b2;
+                c23 += a2*b3;
+                c30 += a3*b0;
+                c31 += a3*b1;
+                c32 += a3*b2;
+                c33 += a3*b3;
+            }
+            C(i,j) = c00;
+            C(i,j+1) = c01;
+            C(i,j+2) = c02;
+            C(i,j+3) = c03;
+            C(i+1,j) = c10;
+            C(i+1,j+1) = c11;
+            C(i+1,j+2) = c12;
+            C(i+1,j+3) = c13;
+            C(i+2,j) = c20;
+            C(i+2,j+1) = c21;
+            C(i+2,j+2) = c22;
+            C(i+2,j+3) = c23;
+            C(i+3,j) = c30;
+            C(i+3,j+1) = c31;
+            C(i+3,j+2) = c32;
+            C(i+3,j+3) = c33;
+        }
+    }
+    if (M4==M&&N4==N) return;
+    // boundary conditions
+    if (M4!=M) dgemm_ijk_opt(M-M4,N,K,alpha,A+M4,LDA,B,LDB,1.0,&C(M4,0),LDC);
+    if (N4!=N) dgemm_ijk_opt(M4,N-N4,K,alpha,A,LDA,&B(0,N4),LDB,1.0,&C(0,N4),LDC);
+}
+
+
+void dgemm_reg_blocking_4x4_avx2(int M, int N, int K, double alpha, double *A, int LDA, double *B, int LDB, double beta, double *C, int LDC){
+    int i,j,k;
+    if (beta != 1.0) scale_c(C,M,N,LDC,beta);
+    int M4=M&-4,N4=N&-4;
+    __m256d valpha = _mm256_set1_pd(alpha);//broadcast alpha to a 256-bit vector
+    for (i=0;i<M4;i+=4){
+        for (j=0;j<N4;j+=4){
+            __m256d c0 = _mm256_setzero_pd();
+            __m256d c1 = _mm256_setzero_pd();
+            __m256d c2 = _mm256_setzero_pd();
+            __m256d c3 = _mm256_setzero_pd();
+            for (k=0;k<K;k++){
+                __m256d a = _mm256_mul_pd(valpha, _mm256_loadu_pd(&A(i,k)));
+                __m256d b0 = _mm256_broadcast_sd(&B(k,j));
+                __m256d b1 = _mm256_broadcast_sd(&B(k,j+1));
+                __m256d b2 = _mm256_broadcast_sd(&B(k,j+2));
+                __m256d b3 = _mm256_broadcast_sd(&B(k,j+3));
+                c0 = _mm256_fmadd_pd(a,b0,c0);
+                c1 = _mm256_fmadd_pd(a,b1,c1);
+                c2 = _mm256_fmadd_pd(a,b2,c2);
+                c3 = _mm256_fmadd_pd(a,b3,c3);
+            }
+            _mm256_storeu_pd(&C(i,j), _mm256_add_pd(c0,_mm256_loadu_pd(&C(i,j))));
+            _mm256_storeu_pd(&C(i,j+1), _mm256_add_pd(c1,_mm256_loadu_pd(&C(i,j+1))));
+            _mm256_storeu_pd(&C(i,j+2), _mm256_add_pd(c2,_mm256_loadu_pd(&C(i,j+2))));
+            _mm256_storeu_pd(&C(i,j+3), _mm256_add_pd(c3,_mm256_loadu_pd(&C(i,j+3))));
+        }
+    }
+    if (M4==M&&N4==N) return;
+    // boundary conditions
+    if (M4!=M) dgemm_ijk_opt(M-M4,N,K,alpha,A+M4,LDA,B,LDB,1.0,&C(M4,0),LDC);
+    if (N4!=N) dgemm_ijk_opt(M4,N-N4,K,alpha,A,LDA,&B(0,N4),LDB,1.0,&C(0,N4),LDC);
+}
+
+#define KERNEL_K1_4x4_avx2_intrinsics\
+    a = _mm256_mul_pd(valpha, _mm256_loadu_pd(&A(i,k)));\
+    b0 = _mm256_broadcast_sd(&B(k,j));\
+    b1 = _mm256_broadcast_sd(&B(k,j+1));\
+    b2 = _mm256_broadcast_sd(&B(k,j+2));\
+    b3 = _mm256_broadcast_sd(&B(k,j+3));\
+    c0 = _mm256_fmadd_pd(a,b0,c0);\
+    c1 = _mm256_fmadd_pd(a,b1,c1);\
+    c2 = _mm256_fmadd_pd(a,b2,c2);\
+    c3 = _mm256_fmadd_pd(a,b3,c3);\
+    k++;
+
+void dgemm_reg_blocking_4x4_avx2_template_unrollx4(int M, int N, int K, double alpha, double *A, int LDA, double *B, int LDB, double beta, double *C, int LDC){
+    int i,j,k;
+    if (beta != 1.0) scale_c(C,M,N,LDC,beta);
+    int M4=M&-4,N4=N&-4,K4=K&-4;
+    __m256d valpha = _mm256_set1_pd(alpha);//broadcast alpha to a 256-bit vector
+    __m256d a,b0,b1,b2,b3;
+    for (i=0;i<M4;i+=4){
+        for (j=0;j<N4;j+=4){
+            __m256d c0 = _mm256_setzero_pd();
+            __m256d c1 = _mm256_setzero_pd();
+            __m256d c2 = _mm256_setzero_pd();
+            __m256d c3 = _mm256_setzero_pd();
+            // unroll the loop by four times
+            for (k=0;k<K4;){
+                KERNEL_K1_4x4_avx2_intrinsics
+                KERNEL_K1_4x4_avx2_intrinsics
+                KERNEL_K1_4x4_avx2_intrinsics
+                KERNEL_K1_4x4_avx2_intrinsics
+            }
+            // deal with the edge case for K
+            for (k=K4;k<K;){
+                KERNEL_K1_4x4_avx2_intrinsics
+            }
+            _mm256_storeu_pd(&C(i,j), _mm256_add_pd(c0,_mm256_loadu_pd(&C(i,j))));
+            _mm256_storeu_pd(&C(i,j+1), _mm256_add_pd(c1,_mm256_loadu_pd(&C(i,j+1))));
+            _mm256_storeu_pd(&C(i,j+2), _mm256_add_pd(c2,_mm256_loadu_pd(&C(i,j+2))));
+            _mm256_storeu_pd(&C(i,j+3), _mm256_add_pd(c3,_mm256_loadu_pd(&C(i,j+3))));
+        }
+    }
+    if (M4==M&&N4==N) return;
+    // boundary conditions
+    if (M4!=M) dgemm_ijk_opt(M-M4,N,K,alpha,A+M4,LDA,B,LDB,1.0,&C(M4,0),LDC);
+    if (N4!=N) dgemm_ijk_opt(M4,N-N4,K,alpha,A,LDA,&B(0,N4),LDB,1.0,&C(0,N4),LDC);
+}
+
+
+#define KERNEL_K1_8x4_avx2_intrinsics\
+    a0 = _mm256_mul_pd(valpha, _mm256_loadu_pd(&A(i,k)));\
+    a1 = _mm256_mul_pd(valpha, _mm256_loadu_pd(&A(i+4,k)));\
+    b0 = _mm256_broadcast_sd(&B(k,j));\
+    b1 = _mm256_broadcast_sd(&B(k,j+1));\
+    b2 = _mm256_broadcast_sd(&B(k,j+2));\
+    b3 = _mm256_broadcast_sd(&B(k,j+3));\
+    c00 = _mm256_fmadd_pd(a0,b0,c00);\
+    c01 = _mm256_fmadd_pd(a1,b0,c01);\
+    c10 = _mm256_fmadd_pd(a0,b1,c10);\
+    c11 = _mm256_fmadd_pd(a1,b1,c11);\
+    c20 = _mm256_fmadd_pd(a0,b2,c20);\
+    c21 = _mm256_fmadd_pd(a1,b2,c21);\
+    c30 = _mm256_fmadd_pd(a0,b3,c30);\
+    c31 = _mm256_fmadd_pd(a1,b3,c31);\
+    k++;
+
+void dgemm_reg_blocking_8x4_avx2_template_unrollx4(int M, int N, int K, double alpha, double *A, int LDA, double *B, int LDB, double beta, double *C, int LDC){
+    int i,j,k;
+    if (beta != 1.0) scale_c(C,M,N,LDC,beta);
+    int M8=M&-8,N4=N&-4,K4=K&-4;
+    __m256d valpha = _mm256_set1_pd(alpha);//broadcast alpha to a 256-bit vector
+    __m256d a0,a1,b0,b1,b2,b3;
+    for (i=0;i<M8;i+=8){
+        for (j=0;j<N4;j+=4){
+            __m256d c00 = _mm256_setzero_pd();
+            __m256d c01 = _mm256_setzero_pd();
+            __m256d c10 = _mm256_setzero_pd();
+            __m256d c11 = _mm256_setzero_pd();
+            __m256d c20 = _mm256_setzero_pd();
+            __m256d c21 = _mm256_setzero_pd();
+            __m256d c30 = _mm256_setzero_pd();
+            __m256d c31 = _mm256_setzero_pd();
+            // unroll the loop by four times
+            for (k=0;k<K4;){
+                KERNEL_K1_8x4_avx2_intrinsics
+                KERNEL_K1_8x4_avx2_intrinsics
+                KERNEL_K1_8x4_avx2_intrinsics
+                KERNEL_K1_8x4_avx2_intrinsics
+            }
+            // deal with the edge case for K
+            for (k=K4;k<K;){
+                KERNEL_K1_8x4_avx2_intrinsics
+            }
+            _mm256_storeu_pd(&C(i,j), _mm256_add_pd(c00,_mm256_loadu_pd(&C(i,j))));
+            _mm256_storeu_pd(&C(i+4,j), _mm256_add_pd(c01,_mm256_loadu_pd(&C(i+4,j))));
+            _mm256_storeu_pd(&C(i,j+1), _mm256_add_pd(c10,_mm256_loadu_pd(&C(i,j+1))));
+            _mm256_storeu_pd(&C(i+4,j+1), _mm256_add_pd(c11,_mm256_loadu_pd(&C(i+4,j+1))));
+            _mm256_storeu_pd(&C(i,j+2), _mm256_add_pd(c20,_mm256_loadu_pd(&C(i,j+2))));
+            _mm256_storeu_pd(&C(i+4,j+2), _mm256_add_pd(c21,_mm256_loadu_pd(&C(i+4,j+2))));
+            _mm256_storeu_pd(&C(i,j+3), _mm256_add_pd(c30,_mm256_loadu_pd(&C(i,j+3))));
+            _mm256_storeu_pd(&C(i+4,j+3), _mm256_add_pd(c31,_mm256_loadu_pd(&C(i+4,j+3))));
+        }
+    }
+    if (M8==M&&N4==N) return;
+    // boundary conditions
+    if (M8!=M) dgemm_ijk_opt(M-M8,N,K,alpha,A+M8,LDA,B,LDB,1.0,&C(M8,0),LDC);
+    if (N4!=N) dgemm_ijk_opt(M8,N-N4,K,alpha,A,LDA,&B(0,N4),LDB,1.0,&C(0,N4),LDC);
+}
+
+
+
+#define macro_kernel_4xkx4\
+    c0 = _mm256_setzero_pd();\
+    c1 = _mm256_setzero_pd();\
+    c2 = _mm256_setzero_pd();\
+    c3 = _mm256_setzero_pd();\
+    for (k=k_start;k<K4;){\
+        KERNEL_K1_4x4_avx2_intrinsics\
+        KERNEL_K1_4x4_avx2_intrinsics\
+        KERNEL_K1_4x4_avx2_intrinsics\
+        KERNEL_K1_4x4_avx2_intrinsics\
+    }\
+    for (k=K4;k<k_end;){\
+        KERNEL_K1_4x4_avx2_intrinsics\
+    }\
+    _mm256_storeu_pd(&C(i,j), _mm256_add_pd(c0,_mm256_loadu_pd(&C(i,j))));\
+    _mm256_storeu_pd(&C(i,j+1), _mm256_add_pd(c1,_mm256_loadu_pd(&C(i,j+1))));\
+    _mm256_storeu_pd(&C(i,j+2), _mm256_add_pd(c2,_mm256_loadu_pd(&C(i,j+2))));\
+    _mm256_storeu_pd(&C(i,j+3), _mm256_add_pd(c3,_mm256_loadu_pd(&C(i,j+3))));
+
+
+#define macro_kernel_8xkx4\
+    c00 = _mm256_setzero_pd();\
+    c01 = _mm256_setzero_pd();\
+    c10 = _mm256_setzero_pd();\
+    c11 = _mm256_setzero_pd();\
+    c20 = _mm256_setzero_pd();\
+    c21 = _mm256_setzero_pd();\
+    c30 = _mm256_setzero_pd();\
+    c31 = _mm256_setzero_pd();\
+    for (k=k_start;k<K4;){\
+        KERNEL_K1_8x4_avx2_intrinsics\
+        KERNEL_K1_8x4_avx2_intrinsics\
+        KERNEL_K1_8x4_avx2_intrinsics\
+        KERNEL_K1_8x4_avx2_intrinsics\
+    }\
+    for (k=K4;k<k_end;){\
+        KERNEL_K1_8x4_avx2_intrinsics\
+    }\
+    _mm256_storeu_pd(&C(i,j), _mm256_add_pd(c00,_mm256_loadu_pd(&C(i,j))));\
+    _mm256_storeu_pd(&C(i+4,j), _mm256_add_pd(c01,_mm256_loadu_pd(&C(i+4,j))));\
+    _mm256_storeu_pd(&C(i,j+1), _mm256_add_pd(c10,_mm256_loadu_pd(&C(i,j+1))));\
+    _mm256_storeu_pd(&C(i+4,j+1), _mm256_add_pd(c11,_mm256_loadu_pd(&C(i+4,j+1))));\
+    _mm256_storeu_pd(&C(i,j+2), _mm256_add_pd(c20,_mm256_loadu_pd(&C(i,j+2))));\
+    _mm256_storeu_pd(&C(i+4,j+2), _mm256_add_pd(c21,_mm256_loadu_pd(&C(i+4,j+2))));\
+    _mm256_storeu_pd(&C(i,j+3), _mm256_add_pd(c30,_mm256_loadu_pd(&C(i,j+3))));\
+    _mm256_storeu_pd(&C(i+4,j+3), _mm256_add_pd(c31,_mm256_loadu_pd(&C(i+4,j+3))));
+
+#define M_BLOCKING 192
+#define N_BLOCKING 96
+#define K_BLOCKING 384
+
+
+void dgemm_cache_blocking_reg_blocking_4x4_avx2_template_unrollx4(\
+    int M, \
+    int N, \
+    int K, \
+    double alpha, \
+    double *A, \
+    int LDA, \
+    double *B, \
+    int LDB, \
+    double beta, \
+    double *C, \
+    int LDC)\
+{
+    int i,j,k;
+    if (beta != 1.0) scale_c(C,M,N,LDC,beta);
+    int M4,N4,K4;
+    __m256d valpha = _mm256_set1_pd(alpha);//broadcast alpha to a 256-bit vector
+    __m256d a,b0,b1,b2,b3;
+    __m256d c0,c1,c2,c3;
+    int M_MAIN = M/M_BLOCKING*M_BLOCKING,M_EDGE=M-M_MAIN;
+    int N_MAIN = N/N_BLOCKING*N_BLOCKING,N_EDGE=N-N_MAIN;
+    int K_MAIN = K/K_BLOCKING*K_BLOCKING,K_EDGE=K-K_MAIN;
+    int m_count,n_count,k_count;
+    int m_inc,n_inc,k_inc,k_start,k_end;
+    for (k_count=0;k_count<K_MAIN;k_count+=K_BLOCKING){
+        //printf("k_count=%d\n",k_count);
+        for (n_count=0;n_count<N_MAIN;n_count+=N_BLOCKING){
+            for (m_count=0;m_count<M_MAIN;m_count+=M_BLOCKING){
+                int inner_m_count,inner_n_count;
+                for (inner_n_count=0;inner_n_count<N_BLOCKING;inner_n_count+=4){
+                    for (inner_m_count=0;inner_m_count<M_BLOCKING;inner_m_count+=4){
+                        i=m_count+inner_m_count;j=n_count+inner_n_count;
+                        k_start=k_count;k_end=k_start+K_BLOCKING;K4=(k_start+K_BLOCKING)&-4;
+                        macro_kernel_4xkx4
+                        //printf("m_count=%d\n",m_count);
+                    }
+                }
+            }
+            for (m_count=M_MAIN;m_count<M;m_count++){
+
+            }
+        }
+        for (n_count=N_MAIN;n_count<N;n_count++){
+
+        }
+    }
+    for (k_count=K_MAIN;k_count<K;k_count++){
+        for (n_count=0;n_count<N_MAIN;n_count+=N_BLOCKING){
+            for (m_count=0;m_count<M_MAIN;m_count+=M_BLOCKING){
+
+            }
+            for (m_count=M_MAIN;m_count<M;m_count++){
+
+            }
+        }
+        for (n_count=N_MAIN;n_count<N;n_count++){
+
+        }
+    }
+}
+
+
+void dgemm_cache_blocking_reg_blocking_8x4_avx2_template_unrollx4(\
+    int M, \
+    int N, \
+    int K, \
+    double alpha, \
+    double *A, \
+    int LDA, \
+    double *B, \
+    int LDB, \
+    double beta, \
+    double *C, \
+    int LDC)\
+{
+    int i,j,k;
+    if (beta != 1.0) scale_c(C,M,N,LDC,beta);
+    int M4,N4,K4;
+    __m256d valpha = _mm256_set1_pd(alpha);//broadcast alpha to a 256-bit vector
+    __m256d a0,a1,b0,b1,b2,b3;
+    __m256d c00,c01,c10,c11,c20,c21,c30,c31;
+    int M_MAIN = M/M_BLOCKING*M_BLOCKING,M_EDGE=M-M_MAIN;
+    int N_MAIN = N/N_BLOCKING*N_BLOCKING,N_EDGE=N-N_MAIN;
+    int K_MAIN = K/K_BLOCKING*K_BLOCKING,K_EDGE=K-K_MAIN;
+    int m_count,n_count,k_count;
+    int m_inc,n_inc,k_inc,k_start,k_end;
+    for (k_count=0;k_count<K_MAIN;k_count+=K_BLOCKING){
+        //printf("k_count=%d\n",k_count);
+        for (n_count=0;n_count<N_MAIN;n_count+=N_BLOCKING){
+            for (m_count=0;m_count<M_MAIN;m_count+=M_BLOCKING){
+                int inner_m_count,inner_n_count;
+                for (inner_n_count=0;inner_n_count<N_BLOCKING;inner_n_count+=4){
+                    for (inner_m_count=0;inner_m_count<M_BLOCKING;inner_m_count+=8){
+                        i=m_count+inner_m_count;j=n_count+inner_n_count;
+                        k_start=k_count;k_end=k_start+K_BLOCKING;K4=(k_start+K_BLOCKING)&-4;
+                        macro_kernel_8xkx4
+                        //printf("m_count=%d\n",m_count);
+                    }
+                }
+            }
+            for (m_count=M_MAIN;m_count<M;m_count++){
+
+            }
+        }
+        for (n_count=N_MAIN;n_count<N;n_count++){
+
+        }
+    }
+    for (k_count=K_MAIN;k_count<K;k_count++){
+        for (n_count=0;n_count<N_MAIN;n_count+=N_BLOCKING){
+            for (m_count=0;m_count<M_MAIN;m_count+=M_BLOCKING){
+
+            }
+            for (m_count=M_MAIN;m_count<M;m_count++){
+
+            }
+        }
+        for (n_count=N_MAIN;n_count<N;n_count++){
+
+        }
+    }
 }
