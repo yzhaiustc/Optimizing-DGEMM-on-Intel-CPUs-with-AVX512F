@@ -4,8 +4,8 @@
 #include "utils.h"
 #include "mkl.h"
 #include "kernels.h"
-#define verbose 1
-#define MYDGEMM dgemm_cache_blocking_reg_blocking_8x4_avx2_template_unrollx4
+//#define verbose 1
+#define MYDGEMM dgemm_packing_cache_blocking_reg_blocking_8x4_avx2_template_unrollx4
 
 int main(int argc, char *argv[]){
     if (argc != 4) {
@@ -19,7 +19,7 @@ int main(int argc, char *argv[]){
         exit(-2);
     }
     double *A=NULL,*B=NULL,*C=NULL,*C_ref=NULL;
-    double alpha = 2.5, beta = 1.5;
+    double alpha = 1, beta = 0;
     A=(double *)malloc(sizeof(double)*m*k);
     B=(double *)malloc(sizeof(double)*k*n);
     C=(double *)malloc(sizeof(double)*m*n);
@@ -34,7 +34,7 @@ int main(int argc, char *argv[]){
     randomize_matrix(A,m,k);randomize_matrix(B,k,n);randomize_matrix(C,m,n);
     copy_matrix(C,C_ref,m*n);
 #ifdef verbose
-    printf("Initialization completed.\n Start verifying correctness against Intel MKL...\n");
+    printf("Initialization completed.\nStart verifying correctness against Intel MKL...\n");
 #endif
     MYDGEMM(m,n,k,alpha,A,m,B,k,beta,C,m);
     cblas_dgemm(CblasColMajor, CblasNoTrans,CblasNoTrans,m,n,k,alpha,A,m,B,k,beta,C_ref,m);

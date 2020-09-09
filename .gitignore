@@ -21,6 +21,8 @@
 *.a
 *.la
 *.lo
+back
+dgemm_x86
 
 # Shared objects (inc. Windows DLLs)
 *.dll

@@ -1,6 +1,6 @@
 BINARY_NAME = dgemm_x86
 CC			= icc
-CFLAGS		= -O3 -march=native
+CFLAGS		= -O3
 MKLPATH		= /opt/intel/mkl
 LDFLAGS		= -L$(MKLPATH)/lib/intel64 -mkl=sequential -lpthread -lm -ldl -DMKL_ILP64
 INCFLAGS	= -I$(MKLPATH)/include
