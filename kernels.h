@@ -1069,10 +1069,26 @@ void packing_b_24x8_edge_version1(double *src,double *dst,int leading_dim,int di
     }
 }
 
-void kernel_n_8(double *a_buffer,double *b_buffer,double *C,double m,double n,double k,double *LDC){
+
+
+void kernel_n_8(double *a_buffer,double *b_buffer,double *c_ptr,int m,int K,int LDC,double alpha){
     int m_count,m_count_sub;
-    for (m_count_sub=m,m_count_sub=0;m_count_sub>23;m_count_sub-=24,m_count+=24){
+    int i,j,k;
+    double *C=c_ptr;
+    __m512d valpha = _mm512_set1_pd(alpha);//broadcast alpha to a 256-bit vector
+    __m512d a,a0,a1,a2,b0,b1,b2,b3;
+    __m512d c00,c01,c02,c10,c11,c12,c20,c21,c22,c30,c31,c32,c40,c41,c42,c50,c51,c52,c60,c61,c62,c70,c71,c72;
+    __m512d c0,c1,c2,c3;
+    double *ptr_packing_a,*ptr_packing_b;
+    int k_start,k_end,K4;
+    K4=K&-4;k_end=K;k_start=0;
+    // printf("*****\n");
+    // print_matrix(C,m,8);
+    // printf("*****\n");
+    for (m_count_sub=m,m_count=0;m_count_sub>23;m_count_sub-=24,m_count+=24){
         //call the micro kernel: m24n8;
+        i=m_count;j=0;ptr_packing_a=a_buffer+m_count*K;ptr_packing_b=b_buffer;
+        macro_kernel_24xkx8_packing_avx512_v1
     }
     for (;m_count_sub>7;m_count_sub-=8,m_count+=8){
         //call the micro kernel: m8n8;
@@ -1085,7 +1101,7 @@ void kernel_n_8(double *a_buffer,double *b_buffer,double *C,double m,double n,do
     }
 }
 
-void kernel_n_4(double *a_buffer,double *b_buffer,double *C,double m,double n,double k,double *LDC){
+void kernel_n_4(double *a_buffer,double *b_buffer,double *C,int m,int K,int LDC){
     int m_count,m_count_sub;
     for (m_count_sub=m,m_count_sub=0;m_count_sub>23;m_count_sub-=24,m_count+=24){
         //call the micro kernel: m24n4;
@@ -1101,7 +1117,7 @@ void kernel_n_4(double *a_buffer,double *b_buffer,double *C,double m,double n,do
     }
 }
 
-void kernel_n2(double *a_buffer,double *b_buffer,double *C,double m,double n,double k,double *LDC){
+void kernel_n2(double *a_buffer,double *b_buffer,double *C,int m,int K,int LDC){
     int m_count,m_count_sub;
     for (m_count_sub=m,m_count_sub=0;m_count_sub>23;m_count_sub-=24,m_count+=24){
         //call the micro kernel: m24n2;
@@ -1117,7 +1133,7 @@ void kernel_n2(double *a_buffer,double *b_buffer,double *C,double m,double n,dou
     }
 }
 
-void kernel_n1(double *a_buffer,double *b_buffer,double *C,double m,double n,double k,double *LDC){
+void kernel_n1(double *a_buffer,double *b_buffer,double *C,double m,double k,int LDC){
     int m_count,m_count_sub;
     for (m_count_sub=m,m_count_sub=0;m_count_sub>23;m_count_sub-=24,m_count+=24){
         //call the micro kernel: m24n1;
@@ -1133,10 +1149,12 @@ void kernel_n1(double *a_buffer,double *b_buffer,double *C,double m,double n,dou
     }
 }
 
-void macro_kernel(double *a_buffer,double *b_buffer,double m,double n,double k,double *C, double LDC){
+void macro_kernel(double *a_buffer,double *b_buffer,int m,int n,int k,double *C, int LDC,int k_inc,double alpha){
     int m_count,n_count,m_count_sub,n_count_sub;
-    for (n_count_sub=n,n_count_sub=0;n_count_sub>7;n_count_sub-=8,n_count+=8){
+    // printf("m= %d, n=%d, k = %d\n",m,n,k);
+    for (n_count_sub=n,n_count=0;n_count_sub>7;n_count_sub-=8,n_count+=8){
         //call the m layer with n=8;
+        kernel_n_8(a_buffer,b_buffer+n_count*k_inc,C+n_count*LDC,m,k_inc,LDC,alpha);
     }
     for (;n_count_sub>3;n_count_sub-=4,n_count+=4){
         //call the m layer with n=4
@@ -1149,6 +1167,10 @@ void macro_kernel(double *a_buffer,double *b_buffer,double m,double n,double k,d
     }
 }
 
+/*
+ * fuse edge cases into packing routine
+ * 
+ **/
 void dgemm_packing_cache_blocking_reg_blocking_24x8_avx512_template_unrollx4_v3(\
     int M, \
     int N, \
@@ -1166,20 +1188,13 @@ void dgemm_packing_cache_blocking_reg_blocking_24x8_avx512_template_unrollx4_v3(
     if (beta != 1.0) scale_c(C,M,N,LDC,beta);
     if (alpha == 0.||K==0) return;
     int M4,N8=N&-8,K4;
-    __m512d valpha = _mm512_set1_pd(alpha);//broadcast alpha to a 256-bit vector
-    __m512d a,a0,a1,a2,b0,b1,b2,b3;
-    __m512d c00,c01,c02,c10,c11,c12,c20,c21,c22,c30,c31,c32,c40,c41,c42,c50,c51,c52,c60,c61,c62,c70,c71,c72;
-    __m512d c0,c1,c2,c3;
-    double *ptr_packing_a,*ptr_packing_b;
+    
     double sc0,sc1,sc2,sc3,sa,sb0,sb1,sb2,sb3;
     double *b_buffer = (double *)aligned_alloc(4096,K_BLOCKING*OUT_N_BLOCKING*sizeof(double));
     double *a_buffer = (double *)aligned_alloc(4096,K_BLOCKING*OUT_M_BLOCKING*sizeof(double));
-    int M_MAIN = M/M_BLOCKING*M_BLOCKING,M_EDGE=M-M_MAIN;
-    int N_MAIN = N/N_BLOCKING*N_BLOCKING,N_EDGE=N-N_MAIN;
-    int K_MAIN = K/K_BLOCKING*K_BLOCKING,K_EDGE=K-K_MAIN;
     int second_m_count,second_n_count,second_m_inc,second_n_inc;
     int m_count,n_count,k_count;
-    int m_inc,n_inc,k_inc,k_start,k_end;
+    int m_inc,n_inc,k_inc;
     for (k_count=0;k_count<K;k_count+=k_inc){
         k_inc=(K-k_count>K_BLOCKING)?K_BLOCKING:K-k_count;
         for (n_count=0;n_count<N;n_count+=n_inc){
@@ -1194,6 +1209,7 @@ void dgemm_packing_cache_blocking_reg_blocking_24x8_avx512_template_unrollx4_v3(
                     second_m_inc=(m_count+m_inc-second_m_count>M_BLOCKING)?M_BLOCKING:m_count+m_inc-second_m_count;
                     for (second_n_count=n_count;second_n_count<n_count+n_inc;second_n_count+=second_n_inc){
                         second_n_inc=(n_count+n_inc-second_n_count>N_BLOCKING)?N_BLOCKING:n_count+n_inc-second_n_count;
+                        macro_kernel(a_buffer+(second_m_count-m_count)*k_inc,b_buffer+(second_n_count-n_count)*k_inc,second_m_inc,second_n_inc,k_inc,&C(second_m_count,second_n_count),LDC,k_inc,alpha);
                         //printf("m=%d,m_inc=%d,n=%d,n_inc=%d\n",second_m_count,second_m_inc,second_n_count,second_n_inc);
                     }
                 }
