@@ -5,7 +5,8 @@
 #include "mkl.h"
 #include "kernels.h"
 //#define verbose 1
-#define MYDGEMM dgemm_packing_cache_blocking_reg_blocking_8x4_avx2_template_unrollx4
+
+#define MYDGEMM dgemm_packing_cache_blocking_reg_blocking_24x8_avx512_template_unrollx4_v3
 
 int main(int argc, char *argv[]){
     if (argc != 4) {

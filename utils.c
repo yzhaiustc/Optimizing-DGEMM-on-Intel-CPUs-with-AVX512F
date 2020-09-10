@@ -67,10 +67,10 @@ void randomize_matrix(double *A, int m, int n)
         for (j = 0; j < n; j++)
         {
             A[i * n + j] = (double)(rand() % 100) + 0.01 * (rand() % 100);
-            //A[i * n + j] = i * n + j + 1;
+            A[i * n + j] = i * n + j + 1;
             if (rand() % 2 == 0)
             {
-                A[i * n + j] *= -1.0;
+                A[i * n + j] *= 1.0;
             }
         }
     }
