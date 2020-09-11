@@ -3,10 +3,10 @@
 #include <stdbool.h>
 #include "utils.h"
 #include "mkl.h"
-#include "kernels.h"
+#include "asm_kernel.h"
 //#define verbose 1
 
-#define MYDGEMM dgemm_packing_cache_blocking_reg_blocking_24x8_avx512_template_unrollx4_v4
+#define MYDGEMM dgemm_asm
 
 int main(int argc, char *argv[]){
     if (argc != 4) {
