@@ -120,7 +120,6 @@ void packing_a_24x8_edge(double *src, double *dst, int leading_dim, int dim_firs
 #define SAVE_m24n6 SAVE_m24n4 unit_save_m24n2(20,21,22,23,24,25)
 #define SAVE_m24n8 SAVE_m24n6 unit_save_m24n2(26,27,28,29,30,31)
 
-// r14==r12,r12==r9,r15==r13
 #define COMPUTE_m24n8 \
   init_m24n8 "movq %%r10,%4; movq %%r12,%1; leaq (%%r12,%%r9,2),%%r13;addq %%r9,%%r13;"\
   "cmpq $16,%4; jb 724783f; movq $16,%4;"\
@@ -148,7 +147,7 @@ void packing_a_24x8_edge(double *src, double *dst, int leading_dim, int dim_firs
     "movq %%r10,%4;"\
   :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(ldc_in_bytes),"+r"(K)\
   :"m"(M),"m"(ALPHA)\
-  :"r9","r10","r11","r12","r13","r14","r15","cc","memory",\
+  :"r9","r10","r11","r12","r13","r14","cc","memory",\
     "zmm0","zmm1","zmm2","zmm3","zmm4","zmm5","zmm6","zmm7","zmm8","zmm9","zmm10","zmm11","zmm12","zmm13","zmm14","zmm15",\
     "zmm16","zmm17","zmm18","zmm19","zmm20","zmm21","zmm22","zmm23","zmm24","zmm25","zmm26","zmm27","zmm28","zmm29","zmm30","zmm31");\
 }
