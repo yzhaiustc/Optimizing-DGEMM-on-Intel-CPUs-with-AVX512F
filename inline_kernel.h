@@ -81,63 +81,120 @@ void packing_a_24x8_edge(double *src, double *dst, int leading_dim, int dim_firs
     }
 }
 
+#define init_m24n1 \
+  "vpxorq %%zmm8,%%zmm8,%%zmm8;vpxorq %%zmm9,%%zmm9,%%zmm9;vpxorq %%zmm10,%%zmm10,%%zmm10;"
+#define init_m24n2 \
+  init_m24n1 \
+  "vpxorq %%zmm11,%%zmm11,%%zmm11;vpxorq %%zmm12,%%zmm12,%%zmm12;vpxorq %%zmm13,%%zmm13,%%zmm13;"
+#define init_m24n4 \
+  init_m24n2 \
+  "vpxorq %%zmm14,%%zmm14,%%zmm14;vpxorq %%zmm15,%%zmm15,%%zmm15;vpxorq %%zmm16,%%zmm16,%%zmm16;"\
+  "vpxorq %%zmm17,%%zmm17,%%zmm17;vpxorq %%zmm18,%%zmm18,%%zmm18;vpxorq %%zmm19,%%zmm19,%%zmm19;"
+#define init_m24n6 \
+  init_m24n4 \
+  "vpxorq %%zmm20,%%zmm20,%%zmm20;vpxorq %%zmm21,%%zmm21,%%zmm21;vpxorq %%zmm22,%%zmm22,%%zmm22;"\
+  "vpxorq %%zmm23,%%zmm23,%%zmm23;vpxorq %%zmm24,%%zmm24,%%zmm24;vpxorq %%zmm25,%%zmm25,%%zmm25;"
+#define init_m24n8 \
+  init_m24n6 \
+  "vpxorq %%zmm26,%%zmm26,%%zmm26;vpxorq %%zmm27,%%zmm27,%%zmm27;vpxorq %%zmm28,%%zmm28,%%zmm28;"\
+  "vpxorq %%zmm29,%%zmm29,%%zmm29;vpxorq %%zmm30,%%zmm30,%%zmm30;vpxorq %%zmm31,%%zmm31,%%zmm31;"
+#define kernel_m24n2_1 \
+  "vbroadcastsd (%1),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm8; vfmadd231pd %%zmm2,%%zmm4,%%zmm9; vfmadd231pd %%zmm3,%%zmm4,%%zmm10;"\
+  "vbroadcastsd 8(%1),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm11; vfmadd231pd %%zmm2,%%zmm5,%%zmm12; vfmadd231pd %%zmm3,%%zmm5,%%zmm13;"
+#define kernel_m24n2_2 \
+  "vbroadcastsd (%1,%%r11,1),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm14; vfmadd231pd %%zmm2,%%zmm4,%%zmm15; vfmadd231pd %%zmm3,%%zmm4,%%zmm16;"\
+  "vbroadcastsd 8(%1,%%r11,1),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm17; vfmadd231pd %%zmm2,%%zmm5,%%zmm18; vfmadd231pd %%zmm3,%%zmm5,%%zmm19;"
+#define kernel_m24n2_3 \
+  "vbroadcastsd (%1,%%r11,2),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm20; vfmadd231pd %%zmm2,%%zmm4,%%zmm21; vfmadd231pd %%zmm3,%%zmm4,%%zmm22;"\
+  "vbroadcastsd 8(%1,%%r11,2),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm23; vfmadd231pd %%zmm2,%%zmm5,%%zmm24; vfmadd231pd %%zmm3,%%zmm5,%%zmm25;"
+#define kernel_m24n2_4 \
+  "vbroadcastsd (%%r12),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm26; vfmadd231pd %%zmm2,%%zmm4,%%zmm27; vfmadd231pd %%zmm3,%%zmm4,%%zmm28;"\
+  "vbroadcastsd 8(%%r12),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm29; vfmadd231pd %%zmm2,%%zmm5,%%zmm30; vfmadd231pd %%zmm3,%%zmm5,%%zmm31;"
 #define LOAD_A_COL \
   "vmovaps (%0),%%zmm1;vmovaps 64(%0),%%zmm2;vmovaps 128(%0),%%zmm3;addq $192,%0;"
 #define KERNEL_m24n8 \
   LOAD_A_COL \
-  "vbroadcastsd (%1),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm8; vfmadd231pd %%zmm2,%%zmm4,%%zmm9; vfmadd231pd %%zmm3,%%zmm4,%%zmm10;"\
-  "vbroadcastsd 8(%1),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm11; vfmadd231pd %%zmm2,%%zmm5,%%zmm12; vfmadd231pd %%zmm3,%%zmm5,%%zmm13;"\
-  "vbroadcastsd (%1,%%r11,1),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm14; vfmadd231pd %%zmm2,%%zmm4,%%zmm15; vfmadd231pd %%zmm3,%%zmm4,%%zmm16;"\
-  "vbroadcastsd 8(%1,%%r11,1),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm17; vfmadd231pd %%zmm2,%%zmm5,%%zmm18; vfmadd231pd %%zmm3,%%zmm5,%%zmm19;"\
-  "vbroadcastsd (%1,%%r11,2),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm20; vfmadd231pd %%zmm2,%%zmm4,%%zmm21; vfmadd231pd %%zmm3,%%zmm4,%%zmm22;"\
-  "vbroadcastsd 8(%1,%%r11,2),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm23; vfmadd231pd %%zmm2,%%zmm5,%%zmm24; vfmadd231pd %%zmm3,%%zmm5,%%zmm25;"\
-  "vbroadcastsd (%%r12),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm26; vfmadd231pd %%zmm2,%%zmm4,%%zmm27; vfmadd231pd %%zmm3,%%zmm4,%%zmm28;"\
-  "vbroadcastsd 8(%%r12),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm29; vfmadd231pd %%zmm2,%%zmm5,%%zmm30; vfmadd231pd %%zmm3,%%zmm5,%%zmm31;"\
+  kernel_m24n2_1 \
+  kernel_m24n2_2 \
+  kernel_m24n2_3 \
+  kernel_m24n2_4 \
   "addq $16,%1;addq $16,%%r12;"
-#define SAVE_m24n8 \
+#define KERNEL_m24n4 \
+  LOAD_A_COL \
+  kernel_m24n2_1 \
+  kernel_m24n2_2 \
+  "addq $16,%1;"
+#define save_m24n2_1 \
   "vaddpd (%2),%%zmm8,%%zmm8;vaddpd 64(%2),%%zmm9,%%zmm9;vaddpd 128(%2),%%zmm10,%%zmm10;"\
   "vmovups %%zmm8,(%2);vmovups %%zmm9,64(%2);vmovups %%zmm10,128(%2);"\
   "vaddpd (%2,%3,1),%%zmm11,%%zmm11;vaddpd 64(%2,%3,1),%%zmm12,%%zmm12;vaddpd 128(%2,%3,1),%%zmm13,%%zmm13;"\
-  "vmovups %%zmm11,(%2,%3,1);vmovups %%zmm12,64(%2,%3,1);vmovups %%zmm13,128(%2,%3,1);leaq (%2,%3,2),%2;"\
+  "vmovups %%zmm11,(%2,%3,1);vmovups %%zmm12,64(%2,%3,1);vmovups %%zmm13,128(%2,%3,1);leaq (%2,%3,2),%2;"
+#define save_m24n2_2 \
   "vaddpd (%2),%%zmm14,%%zmm14;vaddpd 64(%2),%%zmm15,%%zmm15;vaddpd 128(%2),%%zmm16,%%zmm16;"\
   "vmovups %%zmm14,(%2);vmovups %%zmm15,64(%2);vmovups %%zmm16,128(%2);"\
   "vaddpd (%2,%3,1),%%zmm17,%%zmm17;vaddpd 64(%2,%3,1),%%zmm18,%%zmm18;vaddpd 128(%2,%3,1),%%zmm19,%%zmm19;"\
-  "vmovups %%zmm17,(%2,%3,1);vmovups %%zmm18,64(%2,%3,1);vmovups %%zmm19,128(%2,%3,1);leaq (%2,%3,2),%2;"\
+  "vmovups %%zmm17,(%2,%3,1);vmovups %%zmm18,64(%2,%3,1);vmovups %%zmm19,128(%2,%3,1);leaq (%2,%3,2),%2;"
+#define save_m24n2_3 \
   "vaddpd (%2),%%zmm20,%%zmm20;vaddpd 64(%2),%%zmm21,%%zmm21;vaddpd 128(%2),%%zmm22,%%zmm22;"\
   "vmovups %%zmm20,(%2);vmovups %%zmm21,64(%2);vmovups %%zmm22,128(%2);"\
   "vaddpd (%2,%3,1),%%zmm23,%%zmm23;vaddpd 64(%2,%3,1),%%zmm24,%%zmm24;vaddpd 128(%2,%3,1),%%zmm25,%%zmm25;"\
-  "vmovups %%zmm23,(%2,%3,1);vmovups %%zmm24,64(%2,%3,1);vmovups %%zmm25,128(%2,%3,1);leaq (%2,%3,2),%2;"\
+  "vmovups %%zmm23,(%2,%3,1);vmovups %%zmm24,64(%2,%3,1);vmovups %%zmm25,128(%2,%3,1);leaq (%2,%3,2),%2;"
+#define save_m24n2_4 \
   "vaddpd (%2),%%zmm26,%%zmm26;vaddpd 64(%2),%%zmm27,%%zmm27;vaddpd 128(%2),%%zmm28,%%zmm28;"\
   "vmovups %%zmm26,(%2);vmovups %%zmm27,64(%2);vmovups %%zmm28,128(%2);"\
   "vaddpd (%2,%3,1),%%zmm29,%%zmm29;vaddpd 64(%2,%3,1),%%zmm30,%%zmm30;vaddpd 128(%2,%3,1),%%zmm31,%%zmm31;"\
   "vmovups %%zmm29,(%2,%3,1);vmovups %%zmm30,64(%2,%3,1);vmovups %%zmm31,128(%2,%3,1);leaq (%2,%3,2),%2;"
+#define SAVE_m24n8 \
+  save_m24n2_1 \
+  save_m24n2_2 \
+  save_m24n2_3 \
+  save_m24n2_4
+#define SAVE_m24n4 \
+  save_m24n2_1 \
+  save_m24n2_2
 
 void micro_kernel_24x8(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
     __asm__ __volatile__(
         "movq %4,%%r10;movq %4,%%r11;\n\t"
         "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
-        "vpxorq %%zmm8,%%zmm8,%%zmm8;vpxorq %%zmm9,%%zmm9,%%zmm9;vpxorq %%zmm10,%%zmm10,%%zmm10;\n\t"
-        "vpxorq %%zmm11,%%zmm11,%%zmm11;vpxorq %%zmm12,%%zmm12,%%zmm12;vpxorq %%zmm13,%%zmm13,%%zmm13;\n\t"
-        "vpxorq %%zmm14,%%zmm14,%%zmm14;vpxorq %%zmm15,%%zmm15,%%zmm15;vpxorq %%zmm16,%%zmm16,%%zmm16;\n\t"
-        "vpxorq %%zmm17,%%zmm17,%%zmm17;vpxorq %%zmm18,%%zmm18,%%zmm18;vpxorq %%zmm19,%%zmm19,%%zmm19;\n\t"
-        "vpxorq %%zmm20,%%zmm20,%%zmm20;vpxorq %%zmm21,%%zmm21,%%zmm21;vpxorq %%zmm22,%%zmm22,%%zmm22;\n\t"
-        "vpxorq %%zmm23,%%zmm23,%%zmm23;vpxorq %%zmm24,%%zmm24,%%zmm24;vpxorq %%zmm25,%%zmm25,%%zmm25;\n\t"
-        "vpxorq %%zmm26,%%zmm26,%%zmm26;vpxorq %%zmm27,%%zmm27,%%zmm27;vpxorq %%zmm28,%%zmm28,%%zmm28;\n\t"
-        "vpxorq %%zmm29,%%zmm29,%%zmm29;vpxorq %%zmm30,%%zmm30,%%zmm30;vpxorq %%zmm31,%%zmm31,%%zmm31;\n\t"
-        "cmpq $4,%%r13;jb 2f;\n\t"
-        "1:\n\t"//main kernel loop
+        init_m24n8 \
+        "cmpq $4,%%r13;jb 724782f;\n\t"
+        "724781:\n\t"//main kernel loop
         KERNEL_m24n8 \
         KERNEL_m24n8 \
         KERNEL_m24n8 \
         KERNEL_m24n8 \
-        "subq $4,%%r13;cmpq $4,%%r13;jnb 1b;\n\t"
-        "cmpq $0,%%r13;je 3f;\n\t"
-        "2:\n\t"
+        "subq $4,%%r13;cmpq $4,%%r13;jnb 724781b;\n\t"
+        "cmpq $0,%%r13;je 724783f;\n\t"
+        "724782:\n\t"
         KERNEL_m24n8 \
-        "decq %%r13;cmpq $0,%%r13;jnb 2b;\n\t"
-        "3:\n\t"
+        "decq %%r13;testq %%r13,%%r13;jnz 724782b;\n\t"
+        "724783:\n\t"
         SAVE_m24n8 \
-        "4:\n\t"
+        :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(ldc_in_bytes)
+        :"m"(K)
+        :"r10","r11","r12","r13","cc","memory"
+    );
+}
+
+void micro_kernel_24x4(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
+    __asm__ __volatile__(
+        "movq %4,%%r10;movq %4,%%r11;\n\t"
+        "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
+        init_m24n4 \
+        "cmpq $4,%%r13;jb 724742f;\n\t"
+        "724741:\n\t"//main kernel loop
+        KERNEL_m24n4 \
+        KERNEL_m24n4 \
+        KERNEL_m24n4 \
+        KERNEL_m24n4 \
+        "subq $4,%%r13;cmpq $4,%%r13;jnb 724741b;\n\t"
+        "cmpq $0,%%r13;je 724743f;\n\t"
+        "724742:\n\t"
+        KERNEL_m24n4 \
+        "decq %%r13;testq %%r13,%%r13;jnz 724742b;\n\t"
+        "724743:\n\t"
+        SAVE_m24n4 \
         :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(ldc_in_bytes)
         :"m"(K)
         :"r10","r11","r12","r13","cc","memory"
@@ -173,7 +230,23 @@ void macro_kernel(double *a_buffer,double *b_buffer,int m,int n,int k,double *C,
     }
     for (;n_count_sub>3;n_count_sub-=4,n_count+=4){
         //call the m layer with n=4
-        //kernel_n_4_v2(a_buffer,b_buffer+n_count*k_inc,C+n_count*LDC,m,k_inc,LDC,alpha);
+        a_ptr=a_buffer;b_ptr=b_buffer+n_count*k;c_ptr=C+n_count*LDC;
+        for (m_count_sub=m,m_count=0;m_count_sub>23;m_count_sub-=24,m_count+=24){
+            //call the micro kernel: m24n8;
+            a_ptr=a_buffer+m_count*K;
+            b_ptr=b_buffer+n_count*k;
+            c_ptr=C+n_count*LDC+m_count;
+            micro_kernel_24x4(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
+        }
+        for (;m_count_sub>7;m_count_sub-=8,m_count+=8){
+            //call the micro kernel: m8n8;
+        }
+        for (;m_count_sub>1;m_count_sub-=2,m_count+=2){
+            //call the micro kernel: m2n8;
+        }
+        for (;m_count_sub>0;m_count_sub-=1,m_count+=1){
+            //call the micro kernel: m1n8;
+        }
     }
     for (;n_count_sub>1;n_count_sub-=2,n_count+=2){
         //call the m layer with n=2
