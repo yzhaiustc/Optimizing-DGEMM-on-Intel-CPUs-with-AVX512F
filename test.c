@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include "utils.h"
 #include "mkl.h"
-#include "asm_kernel.h"
+#include "inline_kernel.h"
 //#define verbose 1
 
 #define MYDGEMM dgemm_asm
