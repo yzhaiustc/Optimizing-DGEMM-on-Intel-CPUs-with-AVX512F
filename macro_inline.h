@@ -1,6 +1,9 @@
+//#define TIMER 1
 #include "immintrin.h"
 #include <stdint.h>
-#include "utils.h"
+#ifdef TIMER
+  #include "utils.h"
+#endif
 #define A(i,j) A[(i)+(j)*LDA]
 #define B(i,j) B[(i)+(j)*LDB]
 #define C(i,j) C[(i)+(j)*LDC]
@@ -175,7 +178,7 @@ void packing_a_24x8_edge(double *src, double *dst, int leading_dim, int dim_firs
   "movq %2,%3; addq $64,%2;"
 #define kernel_m24n2_1 \
   "vbroadcastsd (%1),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm8; vfmadd231pd %%zmm2,%%zmm4,%%zmm9; vfmadd231pd %%zmm3,%%zmm4,%%zmm10;"\
-  "vbroadcastsd 8(%1),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm11; vfmadd231pd %%zmm2,%%zmm5,%%zmm12; vfmadd231pd %%zmm3,%%zmm5,%%zmm13;"
+  "vbroadcastsd 8(%1),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm11; vfmadd231pd %%zmm2,%%zmm5,%%zmm12; vfmadd231pd %%zmm3,%%zmm5,%%zmm13;prefetcht0 384(%0);"
 #define kernel_m8n2_1 \
   "vbroadcastsd (%1),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm8;"\
   "vbroadcastsd 8(%1),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm11;"
@@ -193,7 +196,7 @@ void packing_a_24x8_edge(double *src, double *dst, int leading_dim, int dim_firs
   "vmovddup 8(%1,%%r11,1),%%xmm5;vfmadd231pd %%xmm1,%%xmm5,%%xmm11;"
 #define kernel_m24n2_3 \
   "vbroadcastsd (%1,%%r11,2),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm20; vfmadd231pd %%zmm2,%%zmm4,%%zmm21; vfmadd231pd %%zmm3,%%zmm4,%%zmm22;"\
-  "vbroadcastsd 8(%1,%%r11,2),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm23; vfmadd231pd %%zmm2,%%zmm5,%%zmm24; vfmadd231pd %%zmm3,%%zmm5,%%zmm25;"
+  "vbroadcastsd 8(%1,%%r11,2),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm23; vfmadd231pd %%zmm2,%%zmm5,%%zmm24; vfmadd231pd %%zmm3,%%zmm5,%%zmm25;prefetcht0 448(%0);"
 #define kernel_m8n2_3 \
   "vbroadcastsd (%1,%%r11,2),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm20;"\
   "vbroadcastsd 8(%1,%%r11,2),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm23;"
@@ -343,15 +346,17 @@ void packing_a_24x8_edge(double *src, double *dst, int leading_dim, int dim_firs
     init_m24n8 \
     "cmpq $4,%%r13;jb 724782f;\n\t"\
     "724781:\n\t"\
-    KERNEL_m24n8 \
-    KERNEL_m24n8 "prefetcht1 (%5);addq $32,%5;"\
-    KERNEL_m24n8 "subq $4,%%r13;"\
+    KERNEL_m24n8 "subq $4,%%r13;testq $12,%%r13;movq $172,%%r10;cmovz %4,%%r10;"\
+    KERNEL_m24n8 "prefetcht1 (%3);subq $129,%3;addq %%r10,%3;"\
+    KERNEL_m24n8 "prefetcht1 (%5);addq $32,%5;cmpq $192,%%r13;cmoveq %2,%3;"\
     KERNEL_m24n8 \
     "cmpq $16,%%r13;jnb 724781b;\n\t"\
+    "movq %2,%3;"\
     "cmpq $0,%%r13;je 724783f;\n\t"\
     "724782:\n\t"\
+    "prefetcht0 (%3); prefetcht0 64(%3); prefetcht0 128(%3);decq %%r13;"\
     KERNEL_m24n8 \
-    "decq %%r13;testq %%r13,%%r13;jnz 724782b;\n\t"\
+    "addq %4,%3;testq %%r13,%%r13;jnz 724782b;\n\t"\
     "724783:\n\t"\
     SAVE_m24n8 
 
@@ -365,10 +370,12 @@ void packing_a_24x8_edge(double *src, double *dst, int leading_dim, int dim_firs
     KERNEL_m8n8 "subq $4,%%r13;"\
     KERNEL_m8n8 \
     "cmpq $4,%%r13;jnb 78781b;\n\t"\
+    "movq %2,%3;"\
     "cmpq $0,%%r13;je 78783f;\n\t"\
     "78782:\n\t"\
+    "prefetcht0 (%3); prefetcht0 64(%3); prefetcht0 128(%3);decq %%r13;"\
     KERNEL_m8n8 \
-    "decq %%r13;testq %%r13,%%r13;jnz 78782b;\n\t"\
+    "addq %4,%3;testq %%r13,%%r13;jnz 78782b;\n\t"\
     "78783:\n\t"\
     SAVE_m8n8 
 
@@ -429,11 +436,15 @@ void dgemm_asm(\
     int LDC)\
 {
     int i,j,k;
-    double t_tot=0.,t_copy_a=0.,t_copy_b=0.,t_copy_c=0., t0, t1;
+#ifdef TIMER
+    double t_tot=0.,t_copy_a=0.,t_copy_b=0.,t_scale_c=0., t0, t1;
     t0=get_sec();
+#endif
     if (beta != 1.0) scale_c_general(C,M,N,LDC,beta);
+#ifdef TIMER
     t1=get_sec();
-    t_copy_c+=(t1-t0);
+    t_scale_c+=(t1-t0);
+#endif
     if (alpha == 0.||K==0) return;
     int M4,N8=N&-8,K4;
     
@@ -446,37 +457,51 @@ void dgemm_asm(\
         k_inc=(K-k_count>K_BLOCKING)?K_BLOCKING:K-k_count;
         for (n_count=0;n_count<N;n_count+=n_inc){
             n_inc=(N-n_count>OUT_N_BLOCKING)?OUT_N_BLOCKING:N-n_count;
+#ifdef TIMER
             t0=get_sec();
+#endif
             packing_b_24x8_edge_version2(B+k_count+n_count*LDB,b_buffer,LDB,k_inc,n_inc);
+#ifdef TIMER
             t1=get_sec();
             t_copy_b+=(t1-t0);
+#endif
             //print_matrix(b_buffer,k_inc,n_inc);
             for (m_count=0;m_count<M;m_count+=m_inc){
                 m_inc=(M-m_count>OUT_M_BLOCKING)?OUT_M_BLOCKING:M-m_count;
+#ifdef TIMER
                 t0=get_sec();
+#endif
                 packing_a_24x8_edge(A+m_count+k_count*LDA,a_buffer,LDA,m_inc,k_inc);
+#ifdef TIMER
                 t1=get_sec();
                 t_copy_a+=(t1-t0);
+#endif
                 //print_matrix(a_buffer,m_inc,k_inc);
                 for (second_m_count=m_count;second_m_count<m_count+m_inc;second_m_count+=second_m_inc){
                     second_m_inc=(m_count+m_inc-second_m_count>M_BLOCKING)?M_BLOCKING:m_count+m_inc-second_m_count;
                     for (second_n_count=n_count;second_n_count<n_count+n_inc;second_n_count+=second_n_inc){
                         second_n_inc=(n_count+n_inc-second_n_count>N_BLOCKING)?N_BLOCKING:n_count+n_inc-second_n_count;
                         // printf("m=%d,n=%d,k=%d,m_dim=%d,n_dim=%d,k_dim=%d\n",second_m_count,second_n_count,k_count,second_m_inc,second_n_inc,k_inc);
+#ifdef TIMER
                         t0=get_sec();
+#endif
                         macro_kernel(a_buffer+(second_m_count-m_count)*k_inc,b_buffer+(second_n_count-n_count)*k_inc,second_m_inc,second_n_inc,k_inc,&C(second_m_count,second_n_count),LDC,k_inc,alpha);
+#ifdef TIMER
                         t1=get_sec();
                         t_tot+=(t1-t0);
+#endif
                         //printf("m=%d,m_inc=%d,n=%d,n_inc=%d\n",second_m_count,second_m_inc,second_n_count,second_n_inc);
                     }
                 }
             }
         }
     }
+#ifdef TIMER
     printf("Time in major loop: %f, perf=%f GFLOPS\n", t_tot,2.*1e-9*M*N*K/t_tot);
     printf("Time in copy A: %f, perf = %f GFLOPS\n", t_copy_a, 2.*1e-9*M*K/t_copy_a);
     printf("Time in copy B: %f, perf = %f GFLOPS\n", t_copy_b, 2.*1e-9*N*K/t_copy_b);
-    printf("Time in copy C: %f, perf = %f GFLOPS\n", t_copy_c, 2.*1e-9*M*N/t_copy_c);
-    printf("Total: %f, perf = %f GFLOPS\n", t_tot+t_copy_b+t_copy_c+t_copy_a, 2.*1e-9*M*N*K/(t_tot+t_copy_b+t_copy_c+t_copy_a));
+    printf("Time in scaling C: %f, perf = %f GFLOPS\n", t_scale_c, 2.*1e-9*M*N/t_scale_c);
+    printf("Total: %f, perf = %f GFLOPS\n", t_tot+t_copy_b+t_scale_c+t_copy_a, 2.*1e-9*M*N*K/(t_tot+t_copy_b+t_scale_c+t_copy_a));
+#endif
     free(a_buffer);free(b_buffer);
 }
