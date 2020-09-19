@@ -3,14 +3,12 @@
 #define A(i,j) A[(i)+(j)*LDA]
 #define B(i,j) B[(i)+(j)*LDB]
 #define C(i,j) C[(i)+(j)*LDC]
-#define OUT_M_BLOCKING 1152
-#define OUT_N_BLOCKING 9216
 #define M_BLOCKING 192
 #define N_BLOCKING 96
 #define K_BLOCKING 384
-
-
-void scale_c(double *C,int M, int N, int LDC, double scalar){
+#define OUT_M_BLOCKING 1152
+#define OUT_N_BLOCKING 9216
+void scale_c_k14(double *C,int M, int N, int LDC, double scalar){
     int i,j;
     for (i=0;i<M;i++){
         for (j=0;j<N;j++){
@@ -19,7 +17,7 @@ void scale_c(double *C,int M, int N, int LDC, double scalar){
     }
 }
 
-void packing_b_24x8_edge_version2(double *src,double *dst,int leading_dim,int dim_first,int dim_second){
+void packing_b_24x8_edge_version2_k14(double *src,double *dst,int leading_dim,int dim_first,int dim_second){
     //dim_first:K,dim_second:N
     double *tosrc1,*tosrc2,*todst;
     todst=dst;
@@ -39,17 +37,19 @@ void packing_b_24x8_edge_version2(double *src,double *dst,int leading_dim,int di
     }
 }
 
-void packing_a_24x8_edge(double *src, double *dst, int leading_dim, int dim_first, int dim_second){
+void packing_a_24x8_edge_k14(double alpha,double *src, double *dst, int leading_dim, int dim_first, int dim_second){
     //dim_first: M, dim_second: K
     double *tosrc,*todst;
     todst=dst;
     int count_first,count_second,count_sub=dim_first;
+    __m512d valpha=_mm512_set1_pd(alpha);
+    __m128d valpha_128=_mm_set1_pd(alpha);
     for (count_first=0;count_sub>23;count_first+=24,count_sub-=24){
         tosrc=src+count_first;
         for(count_second=0;count_second<dim_second;count_second++){
-            _mm512_store_pd(todst,_mm512_loadu_pd(tosrc));
-            _mm512_store_pd(todst+8,_mm512_loadu_pd(tosrc+8));
-            _mm512_store_pd(todst+16,_mm512_loadu_pd(tosrc+16));
+            _mm512_store_pd(todst,_mm512_mul_pd(_mm512_loadu_pd(tosrc),valpha));
+            _mm512_store_pd(todst+8,_mm512_mul_pd(_mm512_loadu_pd(tosrc+8),valpha));
+            _mm512_store_pd(todst+16,_mm512_mul_pd(_mm512_loadu_pd(tosrc+16),valpha));
             tosrc+=leading_dim;
             todst+=24;
         }
@@ -58,7 +58,7 @@ void packing_a_24x8_edge(double *src, double *dst, int leading_dim, int dim_firs
     for (;count_sub>7;count_first+=8,count_sub-=8){
         tosrc=src+count_first;
         for(count_second=0;count_second<dim_second;count_second++){
-            _mm512_store_pd(todst,_mm512_loadu_pd(tosrc));
+            _mm512_store_pd(todst,_mm512_mul_pd(_mm512_loadu_pd(tosrc),valpha));
             tosrc+=leading_dim;
             todst+=8;
         }
@@ -66,7 +66,7 @@ void packing_a_24x8_edge(double *src, double *dst, int leading_dim, int dim_firs
     for (;count_sub>1;count_first+=2,count_sub-=2){
         tosrc=src+count_first;
         for(count_second=0;count_second<dim_second;count_second++){
-            _mm_store_pd(todst,_mm_loadu_pd(tosrc));
+            _mm_store_pd(todst,_mm_mul_pd(_mm_loadu_pd(tosrc),valpha_128));
             tosrc+=leading_dim;
             todst+=2;
         }
@@ -74,7 +74,7 @@ void packing_a_24x8_edge(double *src, double *dst, int leading_dim, int dim_firs
     for (;count_sub>0;count_first+=1,count_sub-=1){
         tosrc=src+count_first;
         for(count_second=0;count_second<dim_second;count_second++){
-            *todst=*tosrc;
+            *todst=(*tosrc)*alpha;
             tosrc+=leading_dim;
             todst++;
         }
@@ -294,7 +294,7 @@ void packing_a_24x8_edge(double *src, double *dst, int leading_dim, int dim_firs
 #define SAVE_m2n4 \
   save_m2n2_1 \
   save_m2n2_2
-void micro_kernel_24x8(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
+void micro_kernel_24x8_k14(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
     __asm__ __volatile__(
         "movq %4,%%r10;movq %4,%%r11;\n\t"
         "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
@@ -318,7 +318,7 @@ void micro_kernel_24x8(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_
     );
 }
 
-void micro_kernel_8x8(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
+void micro_kernel_8x8_k14(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
     __asm__ __volatile__(
         "movq %4,%%r10;movq %4,%%r11;\n\t"
         "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
@@ -342,7 +342,7 @@ void micro_kernel_8x8(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_i
     );
 }
 
-void micro_kernel_2x8(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
+void micro_kernel_2x8_k14(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
     __asm__ __volatile__(
         "movq %4,%%r10;movq %4,%%r11;\n\t"
         "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
@@ -366,7 +366,7 @@ void micro_kernel_2x8(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_i
     );
 }
 
-void micro_kernel_8x4(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
+void micro_kernel_8x4_k14(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
     __asm__ __volatile__(
         "movq %4,%%r10;movq %4,%%r11;\n\t"
         "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
@@ -390,7 +390,7 @@ void micro_kernel_8x4(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_i
     );
 }
 
-void micro_kernel_2x4(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
+void micro_kernel_2x4_k14(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
     __asm__ __volatile__(
         "movq %4,%%r10;movq %4,%%r11;\n\t"
         "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
@@ -414,7 +414,7 @@ void micro_kernel_2x4(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_i
     );
 }
 
-void micro_kernel_24x4(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
+void micro_kernel_24x4_k14(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
     __asm__ __volatile__(
         "movq %4,%%r10;movq %4,%%r11;\n\t"
         "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
@@ -438,7 +438,7 @@ void micro_kernel_24x4(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_
     );
 }
 
-void macro_kernel(double *a_buffer,double *b_buffer,int m,int n,int k,double *C, int LDC,int k_inc,double alpha){
+void macro_kernel_k14(double *a_buffer,double *b_buffer,int m,int n,int k,double *C, int LDC,int k_inc,double alpha){
     int m_count,n_count,m_count_sub,n_count_sub;
     if (m==0||n==0||k==0) return;
     int64_t M=(int64_t)m,K=(int64_t)k,ldc_in_bytes=(int64_t)LDC*sizeof(double);
@@ -453,21 +453,21 @@ void macro_kernel(double *a_buffer,double *b_buffer,int m,int n,int k,double *C,
             a_ptr=a_buffer+m_count*K;
             b_ptr=b_buffer+n_count*k;
             c_ptr=C+n_count*LDC+m_count;
-            micro_kernel_24x8(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
+            micro_kernel_24x8_k14(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
         }
         for (;m_count_sub>7;m_count_sub-=8,m_count+=8){
             //call the micro kernel: m8n8;
             a_ptr=a_buffer+m_count*K;
             b_ptr=b_buffer+n_count*k;
             c_ptr=C+n_count*LDC+m_count;
-            micro_kernel_8x8(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
+            micro_kernel_8x8_k14(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
         }
         for (;m_count_sub>1;m_count_sub-=2,m_count+=2){
             //call the micro kernel: m2n8;
             a_ptr=a_buffer+m_count*K;
             b_ptr=b_buffer+n_count*k;
             c_ptr=C+n_count*LDC+m_count;
-            micro_kernel_2x8(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
+            micro_kernel_2x8_k14(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
         }
         for (;m_count_sub>0;m_count_sub-=1,m_count+=1){
             //call the micro kernel: m1n8;
@@ -481,21 +481,21 @@ void macro_kernel(double *a_buffer,double *b_buffer,int m,int n,int k,double *C,
             a_ptr=a_buffer+m_count*K;
             b_ptr=b_buffer+n_count*k;
             c_ptr=C+n_count*LDC+m_count;
-            micro_kernel_24x4(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
+            micro_kernel_24x4_k14(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
         }
         for (;m_count_sub>7;m_count_sub-=8,m_count+=8){
             //call the micro kernel: m8n4;
             a_ptr=a_buffer+m_count*K;
             b_ptr=b_buffer+n_count*k;
             c_ptr=C+n_count*LDC+m_count;
-            micro_kernel_8x4(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
+            micro_kernel_8x4_k14(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
         }
         for (;m_count_sub>1;m_count_sub-=2,m_count+=2){
             //call the micro kernel: m2n4;
             a_ptr=a_buffer+m_count*K;
             b_ptr=b_buffer+n_count*k;
             c_ptr=C+n_count*LDC+m_count;
-            micro_kernel_2x4(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
+            micro_kernel_2x4_k14(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
         }
         for (;m_count_sub>0;m_count_sub-=1,m_count+=1){
             //call the micro kernel: m1n4;
@@ -510,7 +510,7 @@ void macro_kernel(double *a_buffer,double *b_buffer,int m,int n,int k,double *C,
 }
 
 
-void dgemm_asm(\
+void mydgemm_cpu_v14(\
     int M, \
     int N, \
     int K, \
@@ -524,7 +524,7 @@ void dgemm_asm(\
     int LDC)\
 {
     int i,j,k;
-    if (beta != 1.0) scale_c(C,M,N,LDC,beta);
+    if (beta != 1.0) scale_c_k14(C,M,N,LDC,beta);
     if (alpha == 0.||K==0) return;
     int M4,N8=N&-8,K4;
     double *b_buffer = (double *)aligned_alloc(4096,K_BLOCKING*OUT_N_BLOCKING*sizeof(double));
@@ -536,17 +536,17 @@ void dgemm_asm(\
         k_inc=(K-k_count>K_BLOCKING)?K_BLOCKING:K-k_count;
         for (n_count=0;n_count<N;n_count+=n_inc){
             n_inc=(N-n_count>OUT_N_BLOCKING)?OUT_N_BLOCKING:N-n_count;
-            packing_b_24x8_edge_version2(B+k_count+n_count*LDB,b_buffer,LDB,k_inc,n_inc);
+            packing_b_24x8_edge_version2_k14(B+k_count+n_count*LDB,b_buffer,LDB,k_inc,n_inc);
             //print_matrix(b_buffer,k_inc,n_inc);
             for (m_count=0;m_count<M;m_count+=m_inc){
                 m_inc=(M-m_count>OUT_M_BLOCKING)?OUT_M_BLOCKING:M-m_count;
-                packing_a_24x8_edge(A+m_count+k_count*LDA,a_buffer,LDA,m_inc,k_inc);
+                packing_a_24x8_edge_k14(alpha,A+m_count+k_count*LDA,a_buffer,LDA,m_inc,k_inc);
                 //print_matrix(a_buffer,m_inc,k_inc);
                 for (second_m_count=m_count;second_m_count<m_count+m_inc;second_m_count+=second_m_inc){
                     second_m_inc=(m_count+m_inc-second_m_count>M_BLOCKING)?M_BLOCKING:m_count+m_inc-second_m_count;
                     for (second_n_count=n_count;second_n_count<n_count+n_inc;second_n_count+=second_n_inc){
                         second_n_inc=(n_count+n_inc-second_n_count>N_BLOCKING)?N_BLOCKING:n_count+n_inc-second_n_count;
-                        macro_kernel(a_buffer+(second_m_count-m_count)*k_inc,b_buffer+(second_n_count-n_count)*k_inc,second_m_inc,second_n_inc,k_inc,&C(second_m_count,second_n_count),LDC,k_inc,alpha);
+                        macro_kernel_k14(a_buffer+(second_m_count-m_count)*k_inc,b_buffer+(second_n_count-n_count)*k_inc,second_m_inc,second_n_inc,k_inc,&C(second_m_count,second_n_count),LDC,k_inc,alpha);
                         //printf("m=%d,m_inc=%d,n=%d,n_inc=%d\n",second_m_count,second_m_inc,second_n_count,second_n_inc);
                     }
                 }
