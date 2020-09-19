@@ -21,7 +21,9 @@ int main(int argc, char *argv[]){
         exit(-2);
     }
     int m, n, k,max_size=3000;
-    int n_count,N=3;
+    int n_count,N=3,upper_limit;
+    if (kernel_num<=4&&kernel_num!=0) upper_limit=10;
+    else upper_limit=30;
     double *A=NULL,*B=NULL,*C=NULL,*C_ref=NULL;
     double alpha = 2.0, beta = -1.5;//two arbitary input parameters
     double t0,t1;
@@ -30,7 +32,7 @@ int main(int argc, char *argv[]){
     C=(double *)malloc(sizeof(double)*max_size*max_size);
     C_ref=(double *)malloc(sizeof(double)*max_size*max_size);
     randomize_matrix(A,max_size,max_size);randomize_matrix(B,max_size,max_size);randomize_matrix(C,max_size,max_size);copy_matrix(C,C_ref,max_size*max_size);
-    for (int i_count=0;i_count<30;i_count++){
+    for (int i_count=0;i_count<upper_limit;i_count++){
         m=n=k=SIZE[i_count];
         printf("\nM=N=K=%d:\n",m);
         if (kernel_num != 0){//not an MKL implementation

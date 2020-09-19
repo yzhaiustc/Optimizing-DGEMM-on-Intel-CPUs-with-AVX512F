@@ -1,0 +1,30 @@
+
+M=N=K=100:
+Average elasped time: 0.000257 second, performance: 7.793690 GFLOPS.
+
+M=N=K=200:
+Average elasped time: 0.001840 second, performance: 8.693984 GFLOPS.
+
+M=N=K=300:
+Average elasped time: 0.006310 second, performance: 8.557864 GFLOPS.
+
+M=N=K=400:
+Average elasped time: 0.022525 second, performance: 5.682477 GFLOPS.
+
+M=N=K=500:
+Average elasped time: 0.042763 second, performance: 5.846122 GFLOPS.
+
+M=N=K=600:
+Average elasped time: 0.074758 second, performance: 5.778617 GFLOPS.
+
+M=N=K=700:
+Average elasped time: 0.117001 second, performance: 5.863183 GFLOPS.
+
+M=N=K=800:
+Average elasped time: 0.173845 second, performance: 5.890316 GFLOPS.
+
+M=N=K=900:
+Average elasped time: 0.249669 second, performance: 5.839732 GFLOPS.
+
+M=N=K=1000:
+Average elasped time: 0.446980 second, performance: 4.474470 GFLOPS.

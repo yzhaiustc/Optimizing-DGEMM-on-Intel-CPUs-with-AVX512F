@@ -1,0 +1,90 @@
+
+M=N=K=100:
+Average elasped time: 0.000321 second, performance: 6.238429 GFLOPS.
+
+M=N=K=200:
+Average elasped time: 0.000414 second, performance: 38.612695 GFLOPS.
+
+M=N=K=300:
+Average elasped time: 0.003667 second, performance: 14.727063 GFLOPS.
+
+M=N=K=400:
+Average elasped time: 0.002952 second, performance: 43.355480 GFLOPS.
+
+M=N=K=500:
+Average elasped time: 0.015133 second, performance: 16.520553 GFLOPS.
+
+M=N=K=600:
+Average elasped time: 0.009589 second, performance: 45.051451 GFLOPS.
+
+M=N=K=700:
+Average elasped time: 0.035086 second, performance: 19.551960 GFLOPS.
+
+M=N=K=800:
+Average elasped time: 0.022298 second, performance: 45.924182 GFLOPS.
+
+M=N=K=900:
+Average elasped time: 0.067317 second, performance: 21.658614 GFLOPS.
+
+M=N=K=1000:
+Average elasped time: 0.043609 second, performance: 45.862027 GFLOPS.
+
+M=N=K=1100:
+Average elasped time: 0.109739 second, performance: 24.257560 GFLOPS.
+
+M=N=K=1200:
+Average elasped time: 0.077055 second, performance: 44.851279 GFLOPS.
+
+M=N=K=1300:
+Average elasped time: 0.171770 second, performance: 25.580669 GFLOPS.
+
+M=N=K=1400:
+Average elasped time: 0.119261 second, performance: 46.016709 GFLOPS.
+
+M=N=K=1500:
+Average elasped time: 0.244894 second, performance: 27.562907 GFLOPS.
+
+M=N=K=1600:
+Average elasped time: 0.182871 second, performance: 44.796541 GFLOPS.
+
+M=N=K=1700:
+Average elasped time: 0.349770 second, performance: 28.092722 GFLOPS.
+
+M=N=K=1800:
+Average elasped time: 0.258511 second, performance: 45.119995 GFLOPS.
+
+M=N=K=1900:
+Average elasped time: 0.466513 second, performance: 29.405417 GFLOPS.
+
+M=N=K=2000:
+Average elasped time: 0.364078 second, performance: 43.946583 GFLOPS.
+
+M=N=K=2100:
+Average elasped time: 0.610921 second, performance: 30.318175 GFLOPS.
+
+M=N=K=2200:
+Average elasped time: 0.475678 second, performance: 44.769814 GFLOPS.
+
+M=N=K=2300:
+Average elasped time: 0.791637 second, performance: 30.738851 GFLOPS.
+
+M=N=K=2400:
+Average elasped time: 0.619676 second, performance: 44.616839 GFLOPS.
+
+M=N=K=2500:
+Average elasped time: 0.443580 second, performance: 70.449475 GFLOPS.
+
+M=N=K=2600:
+Average elasped time: 0.771462 second, performance: 45.565449 GFLOPS.
+
+M=N=K=2700:
+Average elasped time: 0.584904 second, performance: 67.303394 GFLOPS.
+
+M=N=K=2800:
+Average elasped time: 0.980574 second, performance: 44.773758 GFLOPS.
+
+M=N=K=2900:
+Average elasped time: 0.740569 second, performance: 65.865575 GFLOPS.
+
+M=N=K=3000:
+Average elasped time: 1.194857 second, performance: 45.193679 GFLOPS.
