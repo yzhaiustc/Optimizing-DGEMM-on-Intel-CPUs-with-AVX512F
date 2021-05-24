@@ -10,8 +10,8 @@ colors = ['b', 'k','c','m', 'r'];
 
 
 
-for kernel1 = 1:19
-if kernel1 ~= 19 
+for kernel1 = 1:18
+if kernel1 ~= 18
     kernel2=kernel1+1;
     kernel2_name = "Kernel"+num2str(kernel2);
 else
@@ -36,7 +36,11 @@ plot(array_size(1, 1:length(data_ref_1))', data_ref_1, strcat('-', markers(1), c
 hold on
 plot(array_size(2, 1:length(data_ref_2))', data_ref_2, strcat('-', markers(2), colors(2)), 'LineWidth',2);
 
-legend(kernel1_name,kernel2_name,'Location','southeast', 'FontSize', 16)
+if kernel1 <= 8
+    legend(kernel1_name,kernel2_name,'Location','northeast', 'FontSize', 16)
+else
+    legend(kernel1_name,kernel2_name,'Location','southeast', 'FontSize', 16)
+end
 xlabel('Matrix Sizes (m=n=k)', 'FontSize', 16, 'FontWeight', 'bold')
 ylabel('Performance (GFLOPS)', 'FontSize', 16, 'FontWeight', 'bold')
 if kernel1 ~= 19 
@@ -51,6 +55,7 @@ else
     xlim([100,1000])
     xticks(100 : 100 : 1000);
 end
+ylim([0, 120])
 a = get(gca,'XTickLabel');
 set(gca,'XTickLabelRotation',45);
 set(gca,'XTickLabel',a,'fontsize',12, 'FontWeight', 'bold')
