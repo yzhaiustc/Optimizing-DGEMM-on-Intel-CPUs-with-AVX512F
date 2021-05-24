@@ -1,13 +1,17 @@
+//#define TIMER 1
 #include "immintrin.h"
 #include <stdint.h>
+#ifdef TIMER
+  #include "utils.h"
+#endif
 #define A(i,j) A[(i)+(j)*LDA]
 #define B(i,j) B[(i)+(j)*LDB]
 #define C(i,j) C[(i)+(j)*LDC]
 #define M_BLOCKING 192
-#define N_BLOCKING 96
+#define N_BLOCKING 2048
 #define K_BLOCKING 384
-#define OUT_M_BLOCKING 1152
-#define OUT_N_BLOCKING 9216
+
+
 void scale_c_k14(double *C,int M, int N, int LDC, double scalar){
     int i,j;
     for (i=0;i<M;i++){
@@ -132,6 +136,14 @@ void packing_a_24x8_edge_k14(double alpha,double *src, double *dst, int leading_
   init_m2n6 \
   "vpxorq %%xmm14,%%xmm14,%%xmm14;"\
   "vpxorq %%xmm15,%%xmm15,%%xmm15;"
+#define save_init_m24 \
+  "movq %2,%3; addq $192,%2;"
+#define save_init_m8 \
+  "movq %2,%3; addq $64,%2;"
+#define save_init_m2 \
+  "movq %2,%3; addq $16,%2;"
+#define save_init_m1 \
+  "movq %2,%3; addq $8,%2;"
 #define kernel_m24n2_1 \
   "vbroadcastsd (%1),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm8; vfmadd231pd %%zmm2,%%zmm4,%%zmm9; vfmadd231pd %%zmm3,%%zmm4,%%zmm10;"\
   "vbroadcastsd 8(%1),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm11; vfmadd231pd %%zmm2,%%zmm5,%%zmm12; vfmadd231pd %%zmm3,%%zmm5,%%zmm13;"
@@ -211,295 +223,256 @@ void packing_a_24x8_edge_k14(double alpha,double *src, double *dst, int leading_
   kernel_m2n2_2 \
   "addq $16,%1;"
 #define save_m24n2_1 \
-  "vaddpd (%2),%%zmm8,%%zmm8;vaddpd 64(%2),%%zmm9,%%zmm9;vaddpd 128(%2),%%zmm10,%%zmm10;"\
-  "vmovups %%zmm8,(%2);vmovups %%zmm9,64(%2);vmovups %%zmm10,128(%2);"\
-  "vaddpd (%2,%3,1),%%zmm11,%%zmm11;vaddpd 64(%2,%3,1),%%zmm12,%%zmm12;vaddpd 128(%2,%3,1),%%zmm13,%%zmm13;"\
-  "vmovups %%zmm11,(%2,%3,1);vmovups %%zmm12,64(%2,%3,1);vmovups %%zmm13,128(%2,%3,1);leaq (%2,%3,2),%2;"
+  "vaddpd (%3),%%zmm8,%%zmm8;vaddpd 64(%3),%%zmm9,%%zmm9;vaddpd 128(%3),%%zmm10,%%zmm10;"\
+  "vmovups %%zmm8,(%3);vmovups %%zmm9,64(%3);vmovups %%zmm10,128(%3);"\
+  "vaddpd (%3,%4,1),%%zmm11,%%zmm11;vaddpd 64(%3,%4,1),%%zmm12,%%zmm12;vaddpd 128(%3,%4,1),%%zmm13,%%zmm13;"\
+  "vmovups %%zmm11,(%3,%4,1);vmovups %%zmm12,64(%3,%4,1);vmovups %%zmm13,128(%3,%4,1);leaq (%3,%4,2),%3;"
 #define save_m8n2_1 \
-  "vaddpd (%2),%%zmm8,%%zmm8;"\
-  "vmovups %%zmm8,(%2);"\
-  "vaddpd (%2,%3,1),%%zmm11,%%zmm11;"\
-  "vmovups %%zmm11,(%2,%3,1);leaq (%2,%3,2),%2;"
+  "vaddpd (%3),%%zmm8,%%zmm8;"\
+  "vmovups %%zmm8,(%3);"\
+  "vaddpd (%3,%4,1),%%zmm11,%%zmm11;"\
+  "vmovups %%zmm11,(%3,%4,1);leaq (%3,%4,2),%3;"
 #define save_m2n2_1 \
-  "vaddpd (%2),%%xmm8,%%xmm8;"\
-  "vmovups %%xmm8,(%2);"\
-  "vaddpd (%2,%3,1),%%xmm9,%%xmm9;"\
-  "vmovups %%xmm9,(%2,%3,1);leaq (%2,%3,2),%2;"
+  "vaddpd (%3),%%xmm8,%%xmm8;"\
+  "vmovups %%xmm8,(%3);"\
+  "vaddpd (%3,%4,1),%%xmm9,%%xmm9;"\
+  "vmovups %%xmm9,(%3,%4,1);leaq (%3,%4,2),%3;"
 #define save_m24n2_2 \
-  "vaddpd (%2),%%zmm14,%%zmm14;vaddpd 64(%2),%%zmm15,%%zmm15;vaddpd 128(%2),%%zmm16,%%zmm16;"\
-  "vmovups %%zmm14,(%2);vmovups %%zmm15,64(%2);vmovups %%zmm16,128(%2);"\
-  "vaddpd (%2,%3,1),%%zmm17,%%zmm17;vaddpd 64(%2,%3,1),%%zmm18,%%zmm18;vaddpd 128(%2,%3,1),%%zmm19,%%zmm19;"\
-  "vmovups %%zmm17,(%2,%3,1);vmovups %%zmm18,64(%2,%3,1);vmovups %%zmm19,128(%2,%3,1);leaq (%2,%3,2),%2;"
+  "vaddpd (%3),%%zmm14,%%zmm14;vaddpd 64(%3),%%zmm15,%%zmm15;vaddpd 128(%3),%%zmm16,%%zmm16;"\
+  "vmovups %%zmm14,(%3);vmovups %%zmm15,64(%3);vmovups %%zmm16,128(%3);"\
+  "vaddpd (%3,%4,1),%%zmm17,%%zmm17;vaddpd 64(%3,%4,1),%%zmm18,%%zmm18;vaddpd 128(%3,%4,1),%%zmm19,%%zmm19;"\
+  "vmovups %%zmm17,(%3,%4,1);vmovups %%zmm18,64(%3,%4,1);vmovups %%zmm19,128(%3,%4,1);leaq (%3,%4,2),%3;"
 #define save_m8n2_2 \
-  "vaddpd (%2),%%zmm14,%%zmm14;"\
-  "vmovups %%zmm14,(%2);"\
-  "vaddpd (%2,%3,1),%%zmm17,%%zmm17;"\
-  "vmovups %%zmm17,(%2,%3,1);leaq (%2,%3,2),%2;"
+  "vaddpd (%3),%%zmm14,%%zmm14;"\
+  "vmovups %%zmm14,(%3);"\
+  "vaddpd (%3,%4,1),%%zmm17,%%zmm17;"\
+  "vmovups %%zmm17,(%3,%4,1);leaq (%3,%4,2),%3;"
 #define save_m2n2_2 \
-  "vaddpd (%2),%%xmm10,%%xmm10;"\
-  "vmovups %%xmm10,(%2);"\
-  "vaddpd (%2,%3,1),%%xmm11,%%xmm11;"\
-  "vmovups %%xmm11,(%2,%3,1);leaq (%2,%3,2),%2;"
+  "vaddpd (%3),%%xmm10,%%xmm10;"\
+  "vmovups %%xmm10,(%3);"\
+  "vaddpd (%3,%4,1),%%xmm11,%%xmm11;"\
+  "vmovups %%xmm11,(%3,%4,1);leaq (%3,%4,2),%3;"
 #define save_m24n2_3 \
-  "vaddpd (%2),%%zmm20,%%zmm20;vaddpd 64(%2),%%zmm21,%%zmm21;vaddpd 128(%2),%%zmm22,%%zmm22;"\
-  "vmovups %%zmm20,(%2);vmovups %%zmm21,64(%2);vmovups %%zmm22,128(%2);"\
-  "vaddpd (%2,%3,1),%%zmm23,%%zmm23;vaddpd 64(%2,%3,1),%%zmm24,%%zmm24;vaddpd 128(%2,%3,1),%%zmm25,%%zmm25;"\
-  "vmovups %%zmm23,(%2,%3,1);vmovups %%zmm24,64(%2,%3,1);vmovups %%zmm25,128(%2,%3,1);leaq (%2,%3,2),%2;"
+  "vaddpd (%3),%%zmm20,%%zmm20;vaddpd 64(%3),%%zmm21,%%zmm21;vaddpd 128(%3),%%zmm22,%%zmm22;"\
+  "vmovups %%zmm20,(%3);vmovups %%zmm21,64(%3);vmovups %%zmm22,128(%3);"\
+  "vaddpd (%3,%4,1),%%zmm23,%%zmm23;vaddpd 64(%3,%4,1),%%zmm24,%%zmm24;vaddpd 128(%3,%4,1),%%zmm25,%%zmm25;"\
+  "vmovups %%zmm23,(%3,%4,1);vmovups %%zmm24,64(%3,%4,1);vmovups %%zmm25,128(%3,%4,1);leaq (%3,%4,2),%3;"
 #define save_m8n2_3 \
-  "vaddpd (%2),%%zmm20,%%zmm20;"\
-  "vmovups %%zmm20,(%2);"\
-  "vaddpd (%2,%3,1),%%zmm23,%%zmm23;"\
-  "vmovups %%zmm23,(%2,%3,1);leaq (%2,%3,2),%2;"
+  "vaddpd (%3),%%zmm20,%%zmm20;"\
+  "vmovups %%zmm20,(%3);"\
+  "vaddpd (%3,%4,1),%%zmm23,%%zmm23;"\
+  "vmovups %%zmm23,(%3,%4,1);leaq (%3,%4,2),%3;"
 #define save_m2n2_3 \
-  "vaddpd (%2),%%xmm12,%%xmm12;"\
-  "vmovups %%xmm12,(%2);"\
-  "vaddpd (%2,%3,1),%%xmm13,%%xmm13;"\
-  "vmovups %%xmm13,(%2,%3,1);leaq (%2,%3,2),%2;"
+  "vaddpd (%3),%%xmm12,%%xmm12;"\
+  "vmovups %%xmm12,(%3);"\
+  "vaddpd (%3,%4,1),%%xmm13,%%xmm13;"\
+  "vmovups %%xmm13,(%3,%4,1);leaq (%3,%4,2),%3;"
 #define save_m24n2_4 \
-  "vaddpd (%2),%%zmm26,%%zmm26;vaddpd 64(%2),%%zmm27,%%zmm27;vaddpd 128(%2),%%zmm28,%%zmm28;"\
-  "vmovups %%zmm26,(%2);vmovups %%zmm27,64(%2);vmovups %%zmm28,128(%2);"\
-  "vaddpd (%2,%3,1),%%zmm29,%%zmm29;vaddpd 64(%2,%3,1),%%zmm30,%%zmm30;vaddpd 128(%2,%3,1),%%zmm31,%%zmm31;"\
-  "vmovups %%zmm29,(%2,%3,1);vmovups %%zmm30,64(%2,%3,1);vmovups %%zmm31,128(%2,%3,1);leaq (%2,%3,2),%2;"
+  "vaddpd (%3),%%zmm26,%%zmm26;vaddpd 64(%3),%%zmm27,%%zmm27;vaddpd 128(%3),%%zmm28,%%zmm28;"\
+  "vmovups %%zmm26,(%3);vmovups %%zmm27,64(%3);vmovups %%zmm28,128(%3);"\
+  "vaddpd (%3,%4,1),%%zmm29,%%zmm29;vaddpd 64(%3,%4,1),%%zmm30,%%zmm30;vaddpd 128(%3,%4,1),%%zmm31,%%zmm31;"\
+  "vmovups %%zmm29,(%3,%4,1);vmovups %%zmm30,64(%3,%4,1);vmovups %%zmm31,128(%3,%4,1);leaq (%3,%4,2),%3;"
 #define save_m8n2_4 \
-  "vaddpd (%2),%%zmm26,%%zmm26;"\
-  "vmovups %%zmm26,(%2);"\
-  "vaddpd (%2,%3,1),%%zmm29,%%zmm29;"\
-  "vmovups %%zmm29,(%2,%3,1);leaq (%2,%3,2),%2;"
+  "vaddpd (%3),%%zmm26,%%zmm26;"\
+  "vmovups %%zmm26,(%3);"\
+  "vaddpd (%3,%4,1),%%zmm29,%%zmm29;"\
+  "vmovups %%zmm29,(%3,%4,1);leaq (%3,%4,2),%3;"
 #define save_m2n2_4 \
-  "vaddpd (%2),%%xmm14,%%xmm14;"\
-  "vmovups %%xmm14,(%2);"\
-  "vaddpd (%2,%3,1),%%xmm15,%%xmm15;"\
-  "vmovups %%xmm15,(%2,%3,1);leaq (%2,%3,2),%2;"
+  "vaddpd (%3),%%xmm14,%%xmm14;"\
+  "vmovups %%xmm14,(%3);"\
+  "vaddpd (%3,%4,1),%%xmm15,%%xmm15;"\
+  "vmovups %%xmm15,(%3,%4,1);leaq (%3,%4,2),%3;"
 #define SAVE_m24n8 \
+  save_init_m24 \
   save_m24n2_1 \
   save_m24n2_2 \
   save_m24n2_3 \
   save_m24n2_4
 #define SAVE_m8n8 \
+  save_init_m8 \
   save_m8n2_1 \
   save_m8n2_2 \
   save_m8n2_3 \
   save_m8n2_4
 #define SAVE_m2n8 \
+  save_init_m2 \
   save_m2n2_1 \
   save_m2n2_2 \
   save_m2n2_3 \
   save_m2n2_4
 #define SAVE_m24n4 \
+  save_init_m24 \
   save_m24n2_1 \
   save_m24n2_2
 #define SAVE_m8n4 \
+  save_init_m8 \
   save_m8n2_1 \
   save_m8n2_2
 #define SAVE_m2n4 \
+  save_init_m2 \
   save_m2n2_1 \
   save_m2n2_2
-void micro_kernel_24x8_k14(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
-    __asm__ __volatile__(
-        "movq %4,%%r10;movq %4,%%r11;\n\t"
-        "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
-        init_m24n8 \
-        "cmpq $4,%%r13;jb 724782f;\n\t"
-        "724781:\n\t"//main kernel loop
-        KERNEL_m24n8 \
-        KERNEL_m24n8 \
-        KERNEL_m24n8 \
-        KERNEL_m24n8 \
-        "subq $4,%%r13;cmpq $4,%%r13;jnb 724781b;\n\t"
-        "cmpq $0,%%r13;je 724783f;\n\t"
-        "724782:\n\t"
-        KERNEL_m24n8 \
-        "decq %%r13;testq %%r13,%%r13;jnz 724782b;\n\t"
-        "724783:\n\t"
-        SAVE_m24n8 \
-        :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(ldc_in_bytes)
-        :"m"(K)
-        :"r10","r11","r12","r13","cc","memory"
-    );
+
+#define COMPUTE_m24n8 \
+    "movq %%r14,%1;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %5,%%r13;"\
+    init_m24n8 \
+    "cmpq $4,%%r13;jb 724782f;\n\t"\
+    "724781:\n\t"\
+    KERNEL_m24n8 \
+    KERNEL_m24n8 \
+    KERNEL_m24n8 "subq $4,%%r13;"\
+    KERNEL_m24n8 \
+    "cmpq $4,%%r13;jnb 724781b;\n\t"\
+    "cmpq $0,%%r13;je 724783f;\n\t"\
+    "724782:\n\t"\
+    KERNEL_m24n8 \
+    "testq %%r13,%%r13;jnz 724782b;\n\t"\
+    "724783:\n\t"\
+    SAVE_m24n8 
+
+#define COMPUTE_m24n4 \
+    "movq %%r14,%1;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %5,%%r13;"\
+    init_m24n4 \
+    "cmpq $4,%%r13;jb 724742f;\n\t"\
+    "724741:\n\t"\
+    KERNEL_m24n4 \
+    KERNEL_m24n4 \
+    KERNEL_m24n4 "subq $4,%%r13;"\
+    KERNEL_m24n4 \
+    "cmpq $4,%%r13;jnb 724741b;\n\t"\
+    "cmpq $0,%%r13;je 724743f;\n\t"\
+    "724742:\n\t"\
+    KERNEL_m24n4 \
+    "testq %%r13,%%r13;jnz 724742b;\n\t"\
+    "724743:\n\t"\
+    SAVE_m24n4 
+
+#define COMPUTE_m8n8 \
+    "movq %%r14,%1;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %5,%%r13;"\
+    init_m8n8 \
+    "cmpq $4,%%r13;jb 78782f;\n\t"\
+    "78781:\n\t"\
+    KERNEL_m8n8 \
+    KERNEL_m8n8 \
+    KERNEL_m8n8 "subq $4,%%r13;"\
+    KERNEL_m8n8 \
+    "cmpq $4,%%r13;jnb 78781b;\n\t"\
+    "cmpq $0,%%r13;je 78783f;\n\t"\
+    "78782:\n\t"\
+    KERNEL_m8n8 \
+    "testq %%r13,%%r13;jnz 78782b;\n\t"\
+    "78783:\n\t"\
+    SAVE_m8n8
+
+#define COMPUTE_m2n8 \
+    "movq %%r14,%1;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %5,%%r13;"\
+    init_m2n8 \
+    "cmpq $4,%%r13;jb 72782f;\n\t"\
+    "72781:\n\t"\
+    KERNEL_m2n8 \
+    KERNEL_m2n8 \
+    KERNEL_m2n8 "subq $4,%%r13;"\
+    KERNEL_m2n8 \
+    "cmpq $4,%%r13;jnb 72781b;\n\t"\
+    "cmpq $0,%%r13;je 72783f;\n\t"\
+    "72782:\n\t"\
+    KERNEL_m2n8 \
+    "testq %%r13,%%r13;jnz 72782b;\n\t"\
+    "72783:\n\t"\
+    SAVE_m2n8
+
+#define COMPUTE_m8n4 \
+    "movq %%r14,%1;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %5,%%r13;"\
+    init_m8n4 \
+    "cmpq $4,%%r13;jb 78742f;\n\t"\
+    "78741:\n\t"\
+    KERNEL_m8n4 \
+    KERNEL_m8n4 \
+    KERNEL_m8n4 "subq $4,%%r13;"\
+    KERNEL_m8n4 \
+    "cmpq $4,%%r13;jnb 78741b;\n\t"\
+    "cmpq $0,%%r13;je 78743f;\n\t"\
+    "78742:\n\t"\
+    KERNEL_m8n4 \
+    "testq %%r13,%%r13;jnz 78742b;\n\t"\
+    "78743:\n\t"\
+    SAVE_m8n4 
+
+#define COMPUTE_m2n4 \
+    "movq %%r14,%1;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %5,%%r13;"\
+    init_m2n4 \
+    "cmpq $4,%%r13;jb 72742f;\n\t"\
+    "72741:\n\t"\
+    KERNEL_m2n4 \
+    KERNEL_m2n4 \
+    KERNEL_m2n4 "subq $4,%%r13;"\
+    KERNEL_m2n4 \
+    "cmpq $4,%%r13;jnb 72741b;\n\t"\
+    "cmpq $0,%%r13;je 72743f;\n\t"\
+    "72742:\n\t"\
+    KERNEL_m2n4 \
+    "testq %%r13,%%r13;jnz 72742b;\n\t"\
+    "72743:\n\t"\
+    SAVE_m2n4 
+
+#define macro_n8 {\
+  __asm__ __volatile__(\
+    "movq %6,%%r15; movq %1,%%r14; movq %5,%%r11; salq $4,%%r11;"\
+    "cmpq $24,%%r15; jb 3243831f;"\
+    "3243830:\n\t"\
+    COMPUTE_m24n8 "subq $24,%%r15; cmpq $24,%%r15; jnb 3243830b;"\
+    "3243831:\n\t"\
+    "cmpq $8,%%r15; jb 3243833f;"\
+    "3243832:\n\t"\
+    COMPUTE_m8n8 "subq $8,%%r15; cmpq $8,%%r15; jnb 3243832b;"\
+    "3243833:\n\t"\
+    "cmpq $2,%%r15; jb 3243835f;"\
+    "3243834:\n\t"\
+    COMPUTE_m2n8 "subq $2,%%r15; cmpq $2,%%r15; jnb 3243834b;"\
+    "3243835:\n\t"\
+    "movq %%r14,%1;"\
+  :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(c_tmp),"+r"(ldc_in_bytes):"m"(K),"m"(M):"r11","r12","r13","r14","r15","cc","memory",\
+    "zmm0","zmm1","zmm2","zmm3","zmm4","zmm5","zmm6","zmm7","zmm8","zmm9","zmm10","zmm11","zmm12","zmm13","zmm14","zmm15",\
+    "zmm16","zmm17","zmm18","zmm19","zmm20","zmm21","zmm22","zmm23","zmm24","zmm25","zmm26","zmm27","zmm28","zmm29","zmm30","zmm31");\
+  a_ptr -= M * K; b_ptr += 8 * K; c_ptr += 8 * ldc - M;\
 }
 
-void micro_kernel_8x8_k14(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
-    __asm__ __volatile__(
-        "movq %4,%%r10;movq %4,%%r11;\n\t"
-        "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
-        init_m8n8 \
-        "cmpq $4,%%r13;jb 78782f;\n\t"
-        "78781:\n\t"//main kernel loop
-        KERNEL_m8n8 \
-        KERNEL_m8n8 \
-        KERNEL_m8n8 \
-        KERNEL_m8n8 \
-        "subq $4,%%r13;cmpq $4,%%r13;jnb 78781b;\n\t"
-        "cmpq $0,%%r13;je 78783f;\n\t"
-        "78782:\n\t"
-        KERNEL_m8n8 \
-        "decq %%r13;testq %%r13,%%r13;jnz 78782b;\n\t"
-        "78783:\n\t"
-        SAVE_m8n8 \
-        :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(ldc_in_bytes)
-        :"m"(K)
-        :"r10","r11","r12","r13","cc","memory"
-    );
+#define macro_n4 {\
+  __asm__ __volatile__(\
+    "movq %6,%%r15; movq %1,%%r14; movq %5,%%r11; salq $4,%%r11;"\
+    "cmpq $24,%%r15; jb 3243431f;"\
+    "3243430:\n\t"\
+    COMPUTE_m24n4 "subq $24,%%r15; cmpq $24,%%r15; jnb 3243430b;"\
+    "3243431:\n\t"\
+    "cmpq $8,%%r15; jb 3243433f;"\
+    "3243432:\n\t"\
+    COMPUTE_m8n4 "subq $8,%%r15; cmpq $8,%%r15; jnb 3243432b;"\
+    "3243433:\n\t"\
+    "cmpq $2,%%r15; jb 3243435f;"\
+    "3243434:\n\t"\
+    COMPUTE_m2n4 "subq $2,%%r15; cmpq $2,%%r15; jnb 3243434b;"\
+    "3243435:\n\t"\
+    "movq %%r14,%1;"\
+  :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(c_tmp),"+r"(ldc_in_bytes):"m"(K),"m"(M):"r11","r12","r13","r14","r15","cc","memory",\
+    "zmm0","zmm1","zmm2","zmm3","zmm4","zmm5","zmm6","zmm7","zmm8","zmm9","zmm10","zmm11","zmm12","zmm13","zmm14","zmm15",\
+    "zmm16","zmm17","zmm18","zmm19","zmm20","zmm21","zmm22","zmm23","zmm24","zmm25","zmm26","zmm27","zmm28","zmm29","zmm30","zmm31");\
+  a_ptr -= M * K; b_ptr += 8 * K; c_ptr += 8 * ldc - M;\
 }
 
-void micro_kernel_2x8_k14(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
-    __asm__ __volatile__(
-        "movq %4,%%r10;movq %4,%%r11;\n\t"
-        "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
-        init_m2n8 \
-        "cmpq $4,%%r13;jb 72782f;\n\t"
-        "72781:\n\t"//main kernel loop
-        KERNEL_m2n8 \
-        KERNEL_m2n8 \
-        KERNEL_m2n8 \
-        KERNEL_m2n8 \
-        "subq $4,%%r13;cmpq $4,%%r13;jnb 72781b;\n\t"
-        "cmpq $0,%%r13;je 72783f;\n\t"
-        "72782:\n\t"
-        KERNEL_m2n8 \
-        "decq %%r13;testq %%r13,%%r13;jnz 72782b;\n\t"
-        "72783:\n\t"
-        SAVE_m2n8 \
-        :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(ldc_in_bytes)
-        :"m"(K)
-        :"r10","r11","r12","r13","cc","memory"
-    );
-}
 
-void micro_kernel_8x4_k14(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
-    __asm__ __volatile__(
-        "movq %4,%%r10;movq %4,%%r11;\n\t"
-        "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
-        init_m8n4 \
-        "cmpq $4,%%r13;jb 78742f;\n\t"
-        "78741:\n\t"//main kernel loop
-        KERNEL_m8n4 \
-        KERNEL_m8n4 \
-        KERNEL_m8n4 \
-        KERNEL_m8n4 \
-        "subq $4,%%r13;cmpq $4,%%r13;jnb 78741b;\n\t"
-        "cmpq $0,%%r13;je 78743f;\n\t"
-        "78742:\n\t"
-        KERNEL_m8n4 \
-        "decq %%r13;testq %%r13,%%r13;jnz 78742b;\n\t"
-        "78743:\n\t"
-        SAVE_m8n4 \
-        :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(ldc_in_bytes)
-        :"m"(K)
-        :"r10","r11","r12","r13","cc","memory"
-    );
-}
-
-void micro_kernel_2x4_k14(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
-    __asm__ __volatile__(
-        "movq %4,%%r10;movq %4,%%r11;\n\t"
-        "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
-        init_m2n4 \
-        "cmpq $4,%%r13;jb 72742f;\n\t"
-        "72741:\n\t"//main kernel loop
-        KERNEL_m2n4 \
-        KERNEL_m2n4 \
-        KERNEL_m2n4 \
-        KERNEL_m2n4 \
-        "subq $4,%%r13;cmpq $4,%%r13;jnb 72741b;\n\t"
-        "cmpq $0,%%r13;je 72743f;\n\t"
-        "72742:\n\t"
-        KERNEL_m2n4 \
-        "decq %%r13;testq %%r13,%%r13;jnz 72742b;\n\t"
-        "72743:\n\t"
-        SAVE_m2n4 \
-        :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(ldc_in_bytes)
-        :"m"(K)
-        :"r10","r11","r12","r13","cc","memory"
-    );
-}
-
-void micro_kernel_24x4_k14(double *a_ptr, double *b_ptr, double *c_ptr, int64_t ldc_in_bytes, int64_t K){
-    __asm__ __volatile__(
-        "movq %4,%%r10;movq %4,%%r11;\n\t"
-        "salq $4,%%r11;leaq (%1,%%r11,2),%%r12;addq %%r11,%%r12;movq %4,%%r13;\n\t"
-        init_m24n4 \
-        "cmpq $4,%%r13;jb 724742f;\n\t"
-        "724741:\n\t"//main kernel loop
-        KERNEL_m24n4 \
-        KERNEL_m24n4 \
-        KERNEL_m24n4 \
-        KERNEL_m24n4 \
-        "subq $4,%%r13;cmpq $4,%%r13;jnb 724741b;\n\t"
-        "cmpq $0,%%r13;je 724743f;\n\t"
-        "724742:\n\t"
-        KERNEL_m24n4 \
-        "decq %%r13;testq %%r13,%%r13;jnz 724742b;\n\t"
-        "724743:\n\t"
-        SAVE_m24n4 \
-        :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(ldc_in_bytes)
-        :"m"(K)
-        :"r10","r11","r12","r13","cc","memory"
-    );
-}
-
-void macro_kernel_k14(double *a_buffer,double *b_buffer,int m,int n,int k,double *C, int LDC,int k_inc,double alpha){
+void macro_kernel_k14(double *a_buffer,double *b_buffer,int m,int n,int k,double *C, int LDC){
     int m_count,n_count,m_count_sub,n_count_sub;
     if (m==0||n==0||k==0) return;
-    int64_t M=(int64_t)m,K=(int64_t)k,ldc_in_bytes=(int64_t)LDC*sizeof(double);
-    double *a_ptr,*b_ptr=b_buffer,*c_ptr=C;
-    double ALPHA=alpha;
+    int64_t M=(int64_t)m,K=(int64_t)k,ldc_in_bytes=(int64_t)LDC*sizeof(double),ldc=(int32_t)LDC;
+    double *a_ptr=a_buffer,*b_ptr=b_buffer,*c_ptr=C,*c_tmp=C;
     // printf("m= %d, n=%d, k = %d\n",m,n,k);
     for (n_count_sub=n,n_count=0;n_count_sub>7;n_count_sub-=8,n_count+=8){
         //call the m layer with n=8;
-        a_ptr=a_buffer;b_ptr=b_buffer+n_count*k;c_ptr=C+n_count*LDC;
-        for (m_count_sub=m,m_count=0;m_count_sub>23;m_count_sub-=24,m_count+=24){
-            //call the micro kernel: m24n8;
-            a_ptr=a_buffer+m_count*K;
-            b_ptr=b_buffer+n_count*k;
-            c_ptr=C+n_count*LDC+m_count;
-            micro_kernel_24x8_k14(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
-        }
-        for (;m_count_sub>7;m_count_sub-=8,m_count+=8){
-            //call the micro kernel: m8n8;
-            a_ptr=a_buffer+m_count*K;
-            b_ptr=b_buffer+n_count*k;
-            c_ptr=C+n_count*LDC+m_count;
-            micro_kernel_8x8_k14(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
-        }
-        for (;m_count_sub>1;m_count_sub-=2,m_count+=2){
-            //call the micro kernel: m2n8;
-            a_ptr=a_buffer+m_count*K;
-            b_ptr=b_buffer+n_count*k;
-            c_ptr=C+n_count*LDC+m_count;
-            micro_kernel_2x8_k14(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
-        }
-        for (;m_count_sub>0;m_count_sub-=1,m_count+=1){
-            //call the micro kernel: m1n8;
-        }
+        macro_n8
     }
     for (;n_count_sub>3;n_count_sub-=4,n_count+=4){
         //call the m layer with n=4
-        a_ptr=a_buffer;b_ptr=b_buffer+n_count*k;c_ptr=C+n_count*LDC;
-        for (m_count_sub=m,m_count=0;m_count_sub>23;m_count_sub-=24,m_count+=24){
-            //call the micro kernel: m24n4;
-            a_ptr=a_buffer+m_count*K;
-            b_ptr=b_buffer+n_count*k;
-            c_ptr=C+n_count*LDC+m_count;
-            micro_kernel_24x4_k14(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
-        }
-        for (;m_count_sub>7;m_count_sub-=8,m_count+=8){
-            //call the micro kernel: m8n4;
-            a_ptr=a_buffer+m_count*K;
-            b_ptr=b_buffer+n_count*k;
-            c_ptr=C+n_count*LDC+m_count;
-            micro_kernel_8x4_k14(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
-        }
-        for (;m_count_sub>1;m_count_sub-=2,m_count+=2){
-            //call the micro kernel: m2n4;
-            a_ptr=a_buffer+m_count*K;
-            b_ptr=b_buffer+n_count*k;
-            c_ptr=C+n_count*LDC+m_count;
-            micro_kernel_2x4_k14(a_ptr,b_ptr,c_ptr,ldc_in_bytes,K);
-        }
-        for (;m_count_sub>0;m_count_sub-=1,m_count+=1){
-            //call the micro kernel: m1n4;
-        }
+        macro_n4
     }
     for (;n_count_sub>1;n_count_sub-=2,n_count+=2){
         //call the m layer with n=2
@@ -523,33 +496,21 @@ void mydgemm_cpu_v14(\
     double *C, \
     int LDC)\
 {
-    int i,j,k;
     if (beta != 1.0) scale_c_k14(C,M,N,LDC,beta);
-    if (alpha == 0.||K==0) return;
-    int M4,N8=N&-8,K4;
-    double *b_buffer = (double *)aligned_alloc(4096,K_BLOCKING*OUT_N_BLOCKING*sizeof(double));
-    double *a_buffer = (double *)aligned_alloc(4096,K_BLOCKING*OUT_M_BLOCKING*sizeof(double));
-    int second_m_count,second_n_count,second_m_inc,second_n_inc;
-    int m_count,n_count,k_count;
-    int m_inc,n_inc,k_inc;
-    for (k_count=0;k_count<K;k_count+=k_inc){
-        k_inc=(K-k_count>K_BLOCKING)?K_BLOCKING:K-k_count;
-        for (n_count=0;n_count<N;n_count+=n_inc){
-            n_inc=(N-n_count>OUT_N_BLOCKING)?OUT_N_BLOCKING:N-n_count;
+    double *b_buffer = (double *)aligned_alloc(4096,K_BLOCKING*N_BLOCKING*sizeof(double));
+    double *a_buffer = (double *)aligned_alloc(4096,K_BLOCKING*M_BLOCKING*sizeof(double));
+    int m_count, n_count, k_count;
+    int m_inc, n_inc, k_inc;
+    for (n_count=0;n_count<N;n_count+=n_inc){
+        n_inc = (N-n_count>N_BLOCKING)?N_BLOCKING:N-n_count;
+        for (k_count=0;k_count<K;k_count+=k_inc){
+            k_inc = (K-k_count>K_BLOCKING)?K_BLOCKING:K-k_count;
             packing_b_24x8_edge_version2_k14(B+k_count+n_count*LDB,b_buffer,LDB,k_inc,n_inc);
-            //print_matrix(b_buffer,k_inc,n_inc);
             for (m_count=0;m_count<M;m_count+=m_inc){
-                m_inc=(M-m_count>OUT_M_BLOCKING)?OUT_M_BLOCKING:M-m_count;
-                packing_a_24x8_edge_k14(alpha,A+m_count+k_count*LDA,a_buffer,LDA,m_inc,k_inc);
-                //print_matrix(a_buffer,m_inc,k_inc);
-                for (second_m_count=m_count;second_m_count<m_count+m_inc;second_m_count+=second_m_inc){
-                    second_m_inc=(m_count+m_inc-second_m_count>M_BLOCKING)?M_BLOCKING:m_count+m_inc-second_m_count;
-                    for (second_n_count=n_count;second_n_count<n_count+n_inc;second_n_count+=second_n_inc){
-                        second_n_inc=(n_count+n_inc-second_n_count>N_BLOCKING)?N_BLOCKING:n_count+n_inc-second_n_count;
-                        macro_kernel_k14(a_buffer+(second_m_count-m_count)*k_inc,b_buffer+(second_n_count-n_count)*k_inc,second_m_inc,second_n_inc,k_inc,&C(second_m_count,second_n_count),LDC,k_inc,alpha);
-                        //printf("m=%d,m_inc=%d,n=%d,n_inc=%d\n",second_m_count,second_m_inc,second_n_count,second_n_inc);
-                    }
-                }
+                m_inc = (M-m_count>M_BLOCKING)?M_BLOCKING:N-m_count;
+                packing_a_24x8_edge_k14(alpha, A+m_count+k_count*LDA,a_buffer,LDA,m_inc,k_inc);
+                //macro kernel: to compute C += A_tilt * B_tilt
+                macro_kernel_k14(a_buffer, b_buffer, m_inc, n_inc, k_inc, &C(m_count, n_count), LDC);
             }
         }
     }

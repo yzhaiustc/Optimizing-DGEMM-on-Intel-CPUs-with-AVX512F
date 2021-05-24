@@ -1,25 +1,50 @@
-//#define TIMER 1
+#define TIMER 1
 #include "immintrin.h"
 #include <stdint.h>
 #ifdef TIMER
-  #include "utils.h"
+  #include "../utils.h"
 #endif
 #define A(i,j) A[(i)+(j)*LDA]
 #define B(i,j) B[(i)+(j)*LDB]
 #define C(i,j) C[(i)+(j)*LDC]
-#define OUT_M_BLOCKING 1152
-#define OUT_N_BLOCKING 9216
 #define M_BLOCKING 192
-#define N_BLOCKING 96
+#define N_BLOCKING 8192
 #define K_BLOCKING 384
 
 
 void scale_c_k17(double *C,int M, int N, int LDC, double scalar){
-    int i,j;
-    for (i=0;i<M;i++){
-        for (j=0;j<N;j++){
-            C(i,j)*=scalar;
+    int m_count,n_count;
+    int M8=M&-8,N4=N&-4,LDC2=LDC<<1,LDC3=LDC2+LDC,LDC4=LDC<<2;
+    __m512d vscalar = _mm512_set1_pd(scalar);
+    double *c_ptr_base1 = C,*c_ptr_base2 = C+LDC,*c_ptr_base3 = C+LDC2,*c_ptr_base4 = C+LDC3;
+    double *c_ptr_dyn1,*c_ptr_dyn2,*c_ptr_dyn3,*c_ptr_dyn4;
+    for (n_count=0;n_count<N4;n_count+=4){
+        c_ptr_dyn1 = c_ptr_base1;c_ptr_dyn2 = c_ptr_base2;c_ptr_dyn3 = c_ptr_base3;c_ptr_dyn4 = c_ptr_base4;
+        for (m_count=0;m_count<M8;m_count+=8){
+            _mm512_storeu_pd(c_ptr_dyn1,_mm512_mul_pd(_mm512_loadu_pd(c_ptr_dyn1),vscalar));
+            _mm512_storeu_pd(c_ptr_dyn2,_mm512_mul_pd(_mm512_loadu_pd(c_ptr_dyn2),vscalar));
+            _mm512_storeu_pd(c_ptr_dyn3,_mm512_mul_pd(_mm512_loadu_pd(c_ptr_dyn3),vscalar));
+            _mm512_storeu_pd(c_ptr_dyn4,_mm512_mul_pd(_mm512_loadu_pd(c_ptr_dyn4),vscalar));
+            c_ptr_dyn1+=8;c_ptr_dyn2+=8;c_ptr_dyn3+=8;c_ptr_dyn4+=8;
         }
+        for (;m_count<M;m_count++){
+            *c_ptr_dyn1 *= scalar; c_ptr_dyn1++;
+            *c_ptr_dyn2 *= scalar; c_ptr_dyn2++;
+            *c_ptr_dyn3 *= scalar; c_ptr_dyn3++;
+            *c_ptr_dyn4 *= scalar; c_ptr_dyn4++;
+        }
+        c_ptr_base1 += LDC4;c_ptr_base2 += LDC4;c_ptr_base3 += LDC4;c_ptr_base4 += LDC4;
+    }
+    for (;n_count<N;n_count++){
+        c_ptr_dyn1 = c_ptr_base1;
+        for (m_count=0;m_count<M8;m_count+=8){
+            _mm512_storeu_pd(c_ptr_dyn1,_mm512_mul_pd(_mm512_loadu_pd(c_ptr_dyn1),vscalar));
+            c_ptr_dyn1+=8;
+        }
+        for (;m_count<M;m_count++){
+            *c_ptr_dyn1 *= scalar; c_ptr_dyn1++;
+        }
+        c_ptr_base1 += LDC4;
     }
 }
 
@@ -148,7 +173,7 @@ void packing_a_24x8_edge_k17(double alpha,double *src, double *dst, int leading_
   "movq %2,%3; addq $8,%2;"
 #define kernel_m24n2_1 \
   "vbroadcastsd (%1),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm8; vfmadd231pd %%zmm2,%%zmm4,%%zmm9; vfmadd231pd %%zmm3,%%zmm4,%%zmm10;"\
-  "vbroadcastsd 8(%1),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm11; vfmadd231pd %%zmm2,%%zmm5,%%zmm12; vfmadd231pd %%zmm3,%%zmm5,%%zmm13;"
+  "vbroadcastsd 8(%1),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm11; vfmadd231pd %%zmm2,%%zmm5,%%zmm12; vfmadd231pd %%zmm3,%%zmm5,%%zmm13;prefetcht0 384(%0);"
 #define kernel_m8n2_1 \
   "vbroadcastsd (%1),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm8;"\
   "vbroadcastsd 8(%1),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm11;"
@@ -166,7 +191,7 @@ void packing_a_24x8_edge_k17(double alpha,double *src, double *dst, int leading_
   "vmovddup 8(%1,%%r11,1),%%xmm5;vfmadd231pd %%xmm1,%%xmm5,%%xmm11;"
 #define kernel_m24n2_3 \
   "vbroadcastsd (%1,%%r11,2),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm20; vfmadd231pd %%zmm2,%%zmm4,%%zmm21; vfmadd231pd %%zmm3,%%zmm4,%%zmm22;"\
-  "vbroadcastsd 8(%1,%%r11,2),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm23; vfmadd231pd %%zmm2,%%zmm5,%%zmm24; vfmadd231pd %%zmm3,%%zmm5,%%zmm25;"
+  "vbroadcastsd 8(%1,%%r11,2),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm23; vfmadd231pd %%zmm2,%%zmm5,%%zmm24; vfmadd231pd %%zmm3,%%zmm5,%%zmm25;prefetcht0 448(%0);"
 #define kernel_m8n2_3 \
   "vbroadcastsd (%1,%%r11,2),%%zmm4;vfmadd231pd %%zmm1,%%zmm4,%%zmm20;"\
   "vbroadcastsd 8(%1,%%r11,2),%%zmm5;vfmadd231pd %%zmm1,%%zmm5,%%zmm23;"
@@ -320,15 +345,17 @@ void packing_a_24x8_edge_k17(double alpha,double *src, double *dst, int leading_
     init_m24n8 \
     "cmpq $4,%%r13;jb 724782f;\n\t"\
     "724781:\n\t"\
+    KERNEL_m24n8 "subq $4,%%r13;testq $12,%%r13;movq $172,%%r10;cmovz %4,%%r10;"\
+    KERNEL_m24n8 "prefetcht1 (%3);subq $129,%3;addq %%r10,%3;"\
+    KERNEL_m24n8 "prefetcht1 (%5);addq $32,%5;cmpq $192,%%r13;cmoveq %2,%3;"\
     KERNEL_m24n8 \
-    KERNEL_m24n8 "prefetcht1 (%5);addq $32,%5;"\
-    KERNEL_m24n8 "subq $4,%%r13;"\
-    KERNEL_m24n8 \
-    "cmpq $4,%%r13;jnb 724781b;\n\t"\
+    "cmpq $16,%%r13;jnb 724781b;\n\t"\
+    "movq %2,%3;"\
     "cmpq $0,%%r13;je 724783f;\n\t"\
     "724782:\n\t"\
+    "prefetcht0 (%3); prefetcht0 64(%3); prefetcht0 128(%3);decq %%r13;"\
     KERNEL_m24n8 \
-    "testq %%r13,%%r13;jnz 724782b;\n\t"\
+    "addq %4,%3;testq %%r13,%%r13;jnz 724782b;\n\t"\
     "724783:\n\t"\
     SAVE_m24n8 
 
@@ -337,15 +364,17 @@ void packing_a_24x8_edge_k17(double alpha,double *src, double *dst, int leading_
     init_m24n4 \
     "cmpq $4,%%r13;jb 724742f;\n\t"\
     "724741:\n\t"\
+    KERNEL_m24n4 "subq $4,%%r13;testq $12,%%r13;movq $172,%%r10;cmovz %4,%%r10;"\
+    KERNEL_m24n4 "prefetcht1 (%3);subq $129,%3;addq %%r10,%3;"\
+    KERNEL_m24n4 "prefetcht1 (%5);addq $32,%5;cmpq $192,%%r13;cmoveq %2,%3;"\
     KERNEL_m24n4 \
-    KERNEL_m24n4 \
-    KERNEL_m24n4 "subq $4,%%r13;"\
-    KERNEL_m24n4 \
-    "cmpq $4,%%r13;jnb 724741b;\n\t"\
+    "cmpq $16,%%r13;jnb 724741b;\n\t"\
+    "movq %2,%3;"\
     "cmpq $0,%%r13;je 724743f;\n\t"\
     "724742:\n\t"\
+    "prefetcht0 (%3); prefetcht0 64(%3); prefetcht0 128(%3);decq %%r13;"\
     KERNEL_m24n4 \
-    "testq %%r13,%%r13;jnz 724742b;\n\t"\
+    "addq %4,%3;testq %%r13,%%r13;jnz 724742b;\n\t"\
     "724743:\n\t"\
     SAVE_m24n4 
 
@@ -359,10 +388,12 @@ void packing_a_24x8_edge_k17(double alpha,double *src, double *dst, int leading_
     KERNEL_m8n8 "subq $4,%%r13;"\
     KERNEL_m8n8 \
     "cmpq $4,%%r13;jnb 78781b;\n\t"\
+    "movq %2,%3;"\
     "cmpq $0,%%r13;je 78783f;\n\t"\
     "78782:\n\t"\
+    "prefetcht0 (%3); prefetcht0 64(%3); prefetcht0 128(%3);decq %%r13;"\
     KERNEL_m8n8 \
-    "testq %%r13,%%r13;jnz 78782b;\n\t"\
+    "addq %4,%3;testq %%r13,%%r13;jnz 78782b;\n\t"\
     "78783:\n\t"\
     SAVE_m8n8
 
@@ -376,10 +407,12 @@ void packing_a_24x8_edge_k17(double alpha,double *src, double *dst, int leading_
     KERNEL_m2n8 "subq $4,%%r13;"\
     KERNEL_m2n8 \
     "cmpq $4,%%r13;jnb 72781b;\n\t"\
+    "movq %2,%3;"\
     "cmpq $0,%%r13;je 72783f;\n\t"\
     "72782:\n\t"\
+    "prefetcht0 (%3); prefetcht0 64(%3); prefetcht0 128(%3);decq %%r13;"\
     KERNEL_m2n8 \
-    "testq %%r13,%%r13;jnz 72782b;\n\t"\
+    "addq %4,%3;testq %%r13,%%r13;jnz 72782b;\n\t"\
     "72783:\n\t"\
     SAVE_m2n8
 
@@ -393,10 +426,12 @@ void packing_a_24x8_edge_k17(double alpha,double *src, double *dst, int leading_
     KERNEL_m8n4 "subq $4,%%r13;"\
     KERNEL_m8n4 \
     "cmpq $4,%%r13;jnb 78741b;\n\t"\
+    "movq %2,%3;"\
     "cmpq $0,%%r13;je 78743f;\n\t"\
     "78742:\n\t"\
+    "prefetcht0 (%3); prefetcht0 64(%3); prefetcht0 128(%3);decq %%r13;"\
     KERNEL_m8n4 \
-    "testq %%r13,%%r13;jnz 78742b;\n\t"\
+    "addq %4,%3;testq %%r13,%%r13;jnz 78742b;\n\t"\
     "78743:\n\t"\
     SAVE_m8n4 
 
@@ -410,10 +445,12 @@ void packing_a_24x8_edge_k17(double alpha,double *src, double *dst, int leading_
     KERNEL_m2n4 "subq $4,%%r13;"\
     KERNEL_m2n4 \
     "cmpq $4,%%r13;jnb 72741b;\n\t"\
+    "movq %2,%3;"\
     "cmpq $0,%%r13;je 72743f;\n\t"\
     "72742:\n\t"\
+    "prefetcht0 (%3); prefetcht0 64(%3); prefetcht0 128(%3);decq %%r13;"\
     KERNEL_m2n4 \
-    "testq %%r13,%%r13;jnz 72742b;\n\t"\
+    "addq %4,%3;testq %%r13,%%r13;jnz 72742b;\n\t"\
     "72743:\n\t"\
     SAVE_m2n4 
 
@@ -434,7 +471,7 @@ void packing_a_24x8_edge_k17(double alpha,double *src, double *dst, int leading_
     COMPUTE_m2n8 "subq $2,%%r15; cmpq $2,%%r15; jnb 3243834b;"\
     "3243835:\n\t"\
     "movq %%r14,%1;"\
-  :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(c_tmp),"+r"(ldc_in_bytes),"+r"(b_pref):"m"(K),"m"(M):"r11","r12","r13","r14","r15","cc","memory",\
+  :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(c_tmp),"+r"(ldc_in_bytes),"+r"(b_pref):"m"(K),"m"(M):"r10","r11","r12","r13","r14","r15","cc","memory",\
     "zmm0","zmm1","zmm2","zmm3","zmm4","zmm5","zmm6","zmm7","zmm8","zmm9","zmm10","zmm11","zmm12","zmm13","zmm14","zmm15",\
     "zmm16","zmm17","zmm18","zmm19","zmm20","zmm21","zmm22","zmm23","zmm24","zmm25","zmm26","zmm27","zmm28","zmm29","zmm30","zmm31");\
   a_ptr -= M * K; b_ptr += 8 * K; c_ptr += 8 * ldc - M;\
@@ -457,20 +494,18 @@ void packing_a_24x8_edge_k17(double alpha,double *src, double *dst, int leading_
     COMPUTE_m2n4 "subq $2,%%r15; cmpq $2,%%r15; jnb 3243434b;"\
     "3243435:\n\t"\
     "movq %%r14,%1;"\
-  :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(c_tmp),"+r"(ldc_in_bytes),"+r"(b_pref):"m"(K),"m"(M):"r11","r12","r13","r14","r15","cc","memory",\
+  :"+r"(a_ptr),"+r"(b_ptr),"+r"(c_ptr),"+r"(c_tmp),"+r"(ldc_in_bytes),"+r"(b_pref):"m"(K),"m"(M):"r10","r11","r12","r13","r14","r15","cc","memory",\
     "zmm0","zmm1","zmm2","zmm3","zmm4","zmm5","zmm6","zmm7","zmm8","zmm9","zmm10","zmm11","zmm12","zmm13","zmm14","zmm15",\
     "zmm16","zmm17","zmm18","zmm19","zmm20","zmm21","zmm22","zmm23","zmm24","zmm25","zmm26","zmm27","zmm28","zmm29","zmm30","zmm31");\
   a_ptr -= M * K; b_ptr += 8 * K; c_ptr += 8 * ldc - M;\
 }
 
 
-void macro_kernel_k17(double *a_buffer,double *b_buffer,int m,int n,int k,double *C, int LDC,int k_inc,double alpha){
+void macro_kernel_k17(double *a_buffer,double *b_buffer,int m,int n,int k,double *C, int LDC){
     int m_count,n_count,m_count_sub,n_count_sub;
     if (m==0||n==0||k==0) return;
     int64_t M=(int64_t)m,K=(int64_t)k,ldc_in_bytes=(int64_t)LDC*sizeof(double),ldc=(int32_t)LDC;
-    double *a_ptr=a_buffer,*b_ptr=b_buffer,*c_ptr=C,*c_tmp=C;
-    double *b_pref=b_ptr;
-    double ALPHA=alpha;
+    double *a_ptr=a_buffer,*b_ptr=b_buffer,*c_ptr=C,*b_pref=b_ptr,*c_tmp=C;
     // printf("m= %d, n=%d, k = %d\n",m,n,k);
     for (n_count_sub=n,n_count=0;n_count_sub>7;n_count_sub-=8,n_count+=8){
         //call the m layer with n=8;
@@ -502,73 +537,23 @@ void mydgemm_cpu_v17(\
     double *C, \
     int LDC)\
 {
-    int i,j,k;
-#ifdef TIMER
-    double t_tot=0.,t_copy_a=0.,t_copy_b=0.,t_scale_c=0., t0, t1;
-    t0=get_sec();
-#endif
     if (beta != 1.0) scale_c_k17(C,M,N,LDC,beta);
-#ifdef TIMER
-    t1=get_sec();
-    t_scale_c+=(t1-t0);
-#endif
-    if (alpha == 0.||K==0) return;
-    int M4,N8=N&-8,K4;
-    
-    double *b_buffer = (double *)aligned_alloc(4096,K_BLOCKING*OUT_N_BLOCKING*sizeof(double));
-    double *a_buffer = (double *)aligned_alloc(4096,K_BLOCKING*OUT_M_BLOCKING*sizeof(double));
-    int second_m_count,second_n_count,second_m_inc,second_n_inc;
-    int m_count,n_count,k_count;
-    int m_inc,n_inc,k_inc;
-    for (k_count=0;k_count<K;k_count+=k_inc){
-        k_inc=(K-k_count>K_BLOCKING)?K_BLOCKING:K-k_count;
-        for (n_count=0;n_count<N;n_count+=n_inc){
-            n_inc=(N-n_count>OUT_N_BLOCKING)?OUT_N_BLOCKING:N-n_count;
-#ifdef TIMER
-            t0=get_sec();
-#endif
+    double *b_buffer = (double *)aligned_alloc(4096,K_BLOCKING*N_BLOCKING*sizeof(double));
+    double *a_buffer = (double *)aligned_alloc(4096,K_BLOCKING*M_BLOCKING*sizeof(double));
+    int m_count, n_count, k_count;
+    int m_inc, n_inc, k_inc;
+    for (n_count=0;n_count<N;n_count+=n_inc){
+        n_inc = (N-n_count>N_BLOCKING)?N_BLOCKING:N-n_count;
+        for (k_count=0;k_count<K;k_count+=k_inc){
+            k_inc = (K-k_count>K_BLOCKING)?K_BLOCKING:K-k_count;
             packing_b_24x8_edge_version2_k17(B+k_count+n_count*LDB,b_buffer,LDB,k_inc,n_inc);
-#ifdef TIMER
-            t1=get_sec();
-            t_copy_b+=(t1-t0);
-#endif
-            //print_matrix(b_buffer,k_inc,n_inc);
             for (m_count=0;m_count<M;m_count+=m_inc){
-                m_inc=(M-m_count>OUT_M_BLOCKING)?OUT_M_BLOCKING:M-m_count;
-#ifdef TIMER
-                t0=get_sec();
-#endif
-                packing_a_24x8_edge_k17(alpha,A+m_count+k_count*LDA,a_buffer,LDA,m_inc,k_inc);
-#ifdef TIMER
-                t1=get_sec();
-                t_copy_a+=(t1-t0);
-#endif
-                //print_matrix(a_buffer,m_inc,k_inc);
-                for (second_m_count=m_count;second_m_count<m_count+m_inc;second_m_count+=second_m_inc){
-                    second_m_inc=(m_count+m_inc-second_m_count>M_BLOCKING)?M_BLOCKING:m_count+m_inc-second_m_count;
-                    for (second_n_count=n_count;second_n_count<n_count+n_inc;second_n_count+=second_n_inc){
-                        second_n_inc=(n_count+n_inc-second_n_count>N_BLOCKING)?N_BLOCKING:n_count+n_inc-second_n_count;
-                        // printf("m=%d,n=%d,k=%d,m_dim=%d,n_dim=%d,k_dim=%d\n",second_m_count,second_n_count,k_count,second_m_inc,second_n_inc,k_inc);
-#ifdef TIMER
-                        t0=get_sec();
-#endif
-                        macro_kernel_k17(a_buffer+(second_m_count-m_count)*k_inc,b_buffer+(second_n_count-n_count)*k_inc,second_m_inc,second_n_inc,k_inc,&C(second_m_count,second_n_count),LDC,k_inc,alpha);
-#ifdef TIMER
-                        t1=get_sec();
-                        t_tot+=(t1-t0);
-#endif
-                        //printf("m=%d,m_inc=%d,n=%d,n_inc=%d\n",second_m_count,second_m_inc,second_n_count,second_n_inc);
-                    }
-                }
+                m_inc = (M-m_count>M_BLOCKING)?M_BLOCKING:N-m_count;
+                packing_a_24x8_edge_k17(alpha, A+m_count+k_count*LDA,a_buffer,LDA,m_inc,k_inc);
+                //macro kernel: to compute C += A_tilt * B_tilt
+                macro_kernel_k17(a_buffer, b_buffer, m_inc, n_inc, k_inc, &C(m_count, n_count), LDC);
             }
         }
     }
-#ifdef TIMER
-    printf("Time in major loop: %f, perf=%f GFLOPS\n", t_tot,2.*1e-9*M*N*K/t_tot);
-    printf("Time in copy A: %f, perf = %f GFLOPS\n", t_copy_a, 2.*1e-9*M*K/t_copy_a);
-    printf("Time in copy B: %f, perf = %f GFLOPS\n", t_copy_b, 2.*1e-9*N*K/t_copy_b);
-    printf("Time in scaling C: %f, perf = %f GFLOPS\n", t_scale_c, 2.*1e-9*M*N/t_scale_c);
-    printf("Total: %f, perf = %f GFLOPS\n", t_tot+t_copy_b+t_scale_c+t_copy_a, 2.*1e-9*M*N*K/(t_tot+t_copy_b+t_scale_c+t_copy_a));
-#endif
     free(a_buffer);free(b_buffer);
 }
