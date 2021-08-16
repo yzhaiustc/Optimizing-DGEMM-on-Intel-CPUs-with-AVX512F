@@ -15,6 +15,10 @@ Just three steps.
 * Second, type in ```make``` to compile. A binary executable ```dgemm_x86``` will be generated.
 * Third, run the binary using ```./dgemm_x86 [kernel_number]```, where ```kernel_number``` selects the kernel for benchmark. ```0``` represents Intel MKL and ```1-19``` represent 19 kernels demonstrating the optimizing strategies.
 
+# related good GEMM tutorials on CPUs
+* https://github.com/flame/how-to-optimize-gemm
+* http://apfel.mathematik.uni-ulm.de/~lehn/sghpc/gemm/index.html
+
 # Step-wise Optimizations
 
 Here we takes the column-major implemetation for DGEMM.
