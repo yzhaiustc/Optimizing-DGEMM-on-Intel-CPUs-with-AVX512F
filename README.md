@@ -105,7 +105,7 @@ We update [kernel9](https://www.cs.ucr.edu/~yzhai015/CPU_GEMM/kernel9.h) with a 
 
 ## Kernel 11 (Kernel 10 + discontinous packing on B)
 
-[source code](https://www.cs.ucr.edu/~yzhai015/CPU_GEMM/kernel12.h)
+[source code](https://www.cs.ucr.edu/~yzhai015/CPU_GEMM/kernel11.h)
 
 Previously in [kernel10](https://www.cs.ucr.edu/~yzhai015/CPU_GEMM/kernel10.h) we pack the matrix B into totally continous memory. Recalling that the L2 cache contains multiple cache line buffers so that the L2 hardware prefetcher can prefetch the data from lower memory hierarchy. In this step, breaking the continous memory access in B can benefit the L2 hw prefetcher so that the memory latency can be further hidden.
 
