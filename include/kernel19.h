@@ -692,10 +692,9 @@ void mydgemm_cpu_v19(\
     double *b_buffer_global = NULL;
     if (alpha == 0.||K==0) return;
 
-    int nthr_spawn = 10;
-    #pragma omp parallel num_threads(nthr_spawn) 
+    #pragma omp parallel
     {
-        int nthr = nthr_spawn;
+        int nthr = omp_get_num_threads();
         int ithr = omp_get_thread_num();
         int m_offset = 0, m_block = 0;
         partition_m_dim(ithr, nthr, M, &m_offset, &m_block);
