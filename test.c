@@ -3,21 +3,18 @@
 #include <stdbool.h>
 #include "utils.h"
 #include "mkl.h"
-//#define verbose 1
-
-#define MYDGEMM dgemm_asm
 
 int main(int argc, char *argv[]){
     if (argc != 2) {
-        printf("Please select a kernel (range 0 - 18, here 0 is for Intel MKL).\n");
+        printf("Please select a kernel (range 0 - 19, here 0 is for Intel MKL).\n");
         exit(-1);
     }
     int SIZE[30]={100,200,300,400,500,600,700,800,900,1000,1100,\
                 1200,1300,1400,1500,1600,1700,1800,1900,2000,\
                 2100,2200,2300,2400,2500,2600,2700,2800,2900,3000};//testing 100-3000 square matrices
     int kernel_num=atoi(argv[1]);
-    if (kernel_num<0||kernel_num>18) {
-        printf("Please enter a valid kernel number (0-18).\n");
+    if (kernel_num<0||kernel_num>19) {
+        printf("Please enter a valid kernel number (0-19).\n");
         exit(-2);
     }
     int m, n, k,max_size=3000;
@@ -25,7 +22,7 @@ int main(int argc, char *argv[]){
     if (kernel_num<=4&&kernel_num!=0) upper_limit=10;
     else upper_limit=30;
     double *A=NULL,*B=NULL,*C=NULL,*C_ref=NULL;
-    double alpha = 1.0, beta = 0;//two arbitary input parameters
+    double alpha = 2.0, beta = 0.;//two arbitary input parameters
     double t0,t1;
     A=(double *)malloc(sizeof(double)*max_size*max_size);
     B=(double *)malloc(sizeof(double)*max_size*max_size);
