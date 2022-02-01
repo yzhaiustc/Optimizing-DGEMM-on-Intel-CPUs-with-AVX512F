@@ -5,7 +5,7 @@
 #define B(i,j) B[(i)+(j)*LDB]
 #define C(i,j) C[(i)+(j)*LDC]
 #define M_BLOCKING 192
-#define N_BLOCKING 8640
+#define N_BLOCKING 9216
 #define K_BLOCKING 384
 #define MIN(a, b) ((a) < (b)) ? (a) : (b)
 #define MAX(a, b) ((a) > (b)) ? (a) : (b)
