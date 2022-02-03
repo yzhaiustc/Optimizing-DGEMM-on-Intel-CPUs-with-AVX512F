@@ -16,7 +16,7 @@ I warmly welcome questions and discussions through pull requests or my personal 
 Just three steps.
 * We first modify the path of MKL in ```Makefile```.
 * Second, type in ```make``` to compile. A binary executable ```dgemm_x86``` will be generated.
-* Third, run the binary using ```./dgemm_x86 [kernel_number]```, where ```kernel_number``` selects the kernel for benchmark. ```0``` represents Intel MKL and ```1-18``` represent 18 kernels demonstrating the optimizing strategies.
+* Third, run the binary using ```./dgemm_x86 [kernel_number]```, where ```kernel_number``` selects the kernel for benchmark. ```0``` represents Intel MKL and ```1-19``` represent 19 kernels demonstrating the optimizing strategies. Here ```kernel18``` is the best serial version while ```kernel19``` is the best parallel version. Both of them reach the performance comparable to / faster than Intel MKL on lastest Intel CPUs.
 
 # Related good GEMM tutorials/materials on x86-64 CPUs
 * https://github.com/flame/how-to-optimize-gemm
@@ -26,7 +26,7 @@ Just three steps.
 
 # Step-wise Optimizations
 
-Here we takes the column-major implemetation for DGEMM.
+Here we take the column-major implemetation for DGEMM.
 
 ## Kernel 1 (naive version)
 [source code](https://www.cs.ucr.edu/~yzhai015/CPU_GEMM/kernel1.h)
